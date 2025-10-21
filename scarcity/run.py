@@ -14,6 +14,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scarcity.core import Expert, StructureExpert, DriftExpert, Router, Client, Server, MetaLearner
+import torch
 
 
 def setup_logging(level=logging.INFO):
@@ -48,6 +49,134 @@ def setup_logging(level=logging.INFO):
     root_logger.addHandler(file_handler)
     
     return root_logger
+
+
+def run_stage1_simulation(num_clients=3):
+    """
+    Stage 1: Simple simulation of local training and insight generation.
+    
+    Each client has fake numeric data, trains locally using experts,
+    and generates insights. Server collects and aggregates insights.
+    
+    Args:
+        num_clients: Number of clients (default 3 for simplicity)
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 80)
+    logger.info("STAGE 1: Local Training and Insight Generation")
+    logger.info("=" * 80)
+    
+    # Create clients with simple fake data
+    logger.info(f"\nCreating {num_clients} clients with fake NumPy data...")
+    clients = []
+    
+    for client_id in range(num_clients):
+        # Generate fake data (NumPy random arrays)
+        np.random.seed(client_id * 10)
+        fake_data = np.random.randn(50, 10)  # 50 samples, 10 features
+        fake_labels = np.random.randn(50, 1)
+        
+        logger.info(f"  Client {client_id}: Generated {fake_data.shape[0]} samples")
+        clients.append({
+            "id": client_id,
+            "data": torch.tensor(fake_data, dtype=torch.float32),
+            "labels": torch.tensor(fake_labels, dtype=torch.float32),
+            "experts": [
+                StructureExpert(expert_id=0, input_dim=10, output_dim=1),
+                DriftExpert(expert_id=1, input_dim=10, output_dim=1)
+            ]
+        })
+    
+    # Server collects insights
+    server_insights = []
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("Local Training Phase")
+    logger.info("=" * 80 + "\n")
+    
+    # Each client trains locally
+    for client in clients:
+        logger.info(f"Client {client['id']}: Starting local training...")
+        
+        client_insights = {}
+        
+        # Train each expert
+        for expert in client['experts']:
+            expert_name = type(expert).__name__
+            logger.info(f"  Training {expert_name}...")
+            
+            # Train expert on fake data
+            metrics = expert.train(
+                X_train=client['data'],
+                y_train=client['labels'],
+                epochs=3,
+                lr=0.01
+            )
+            
+            # Get summary statistics
+            summary = expert.summarize(client['data'])
+            
+            client_insights[expert_name] = {
+                "training_metrics": metrics,
+                "summary": summary
+            }
+            
+            logger.info(f"    {expert_name} trained: Loss {metrics['initial_loss']:.4f} -> {metrics['final_loss']:.4f}")
+            
+            if expert_name == "StructureExpert":
+                logger.info(f"    Statistics: mean={summary['mean']:.4f}, std={summary['std']:.4f}")
+            elif expert_name == "DriftExpert":
+                logger.info(f"    Drift: current_mean={summary['current_mean']:.4f}, drift={summary['drift']:.4f}")
+        
+        # Generate insight
+        insight = {
+            "client_id": client['id'],
+            "insights": client_insights,
+            "num_experts": len(client['experts']),
+            "data_shape": list(client['data'].shape)
+        }
+        
+        logger.info(f"  Client {client['id']}: Generated insight with {len(client_insights)} expert summaries\n")
+        
+        # Send insight to server
+        server_insights.append(insight)
+    
+    logger.info("=" * 80)
+    logger.info("Server Aggregation Phase")
+    logger.info("=" * 80 + "\n")
+    
+    # Server aggregates insights
+    logger.info(f"Server: Received insights from {len(server_insights)} clients")
+    
+    for insight in server_insights:
+        logger.info(f"  Client {insight['client_id']}: {insight['num_experts']} experts, data shape {insight['data_shape']}")
+    
+    # Aggregate statistics across all clients
+    all_structure_means = []
+    all_structure_stds = []
+    all_drift_values = []
+    
+    for insight in server_insights:
+        if "StructureExpert" in insight['insights']:
+            struct_summary = insight['insights']['StructureExpert']['summary']
+            all_structure_means.append(struct_summary['mean'])
+            all_structure_stds.append(struct_summary['std'])
+        
+        if "DriftExpert" in insight['insights']:
+            drift_summary = insight['insights']['DriftExpert']['summary']
+            all_drift_values.append(drift_summary['drift'])
+    
+    logger.info("\nAggregated Statistics:")
+    logger.info(f"  Average data mean across clients: {np.mean(all_structure_means):.4f}")
+    logger.info(f"  Average data std across clients: {np.mean(all_structure_stds):.4f}")
+    logger.info(f"  Average drift across clients: {np.mean(all_drift_values):.4f}")
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("Stage 1 Complete!")
+    logger.info("=" * 80)
+    
+    return server_insights
 
 
 def run_federated_learning(num_clients=5, num_rounds=5, input_dim=10, output_dim=1):
@@ -316,9 +445,14 @@ def main():
     OUTPUT_DIM = 1
     
     # Choose which mode to run
-    MODE = "expert_routing"  # Options: "federated_learning", "insight_exchange", or "expert_routing"
+    MODE = "stage1"  # Options: "stage1", "federated_learning", "insight_exchange", or "expert_routing"
     
-    if MODE == "federated_learning":
+    if MODE == "stage1":
+        logger.info("\nRunning in STAGE 1 mode - Simple Training & Insights")
+        logger.info("=" * 80)
+        insights = run_stage1_simulation(num_clients=3)
+        
+    elif MODE == "federated_learning":
         logger.info("\nRunning in FEDERATED LEARNING mode (Stage 2)")
         logger.info("=" * 80)
         server, clients = run_federated_learning(

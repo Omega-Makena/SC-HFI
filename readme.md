@@ -25,6 +25,34 @@ The basic project structure has been established with:
 - ✓ Placeholder methods for future implementation
 - ✓ Entry script with logging configuration
 
+## Stage 1 - Local Training and Insight Generation ✓
+
+Simple demonstration of local training without federated coordination:
+- ✓ **Expert.train()** - Trains on fake NumPy data (50 samples, 10 features)
+  - Uses PyTorch Linear model with SGD optimizer
+  - Returns training metrics: initial_loss → final_loss
+- ✓ **Expert.summarize()** - Computes statistics from data
+  - StructureExpert: mean, std, variance, min, max
+  - DriftExpert: current_mean, drift (absolute difference from previous)
+- ✓ **Client local training** - Each client trains 2 experts independently
+  - Loops through all experts, calls train() on each
+  - Collects summary statistics from each expert
+- ✓ **Client.generate_insight()** - Returns structured dict
+  - Format: `{"client_id": id, "insights": {expert_name: {metrics, summary}}}`
+  - Includes training metrics and summary stats for each expert
+- ✓ **Server.receive_insight()** - Collects insights from all clients
+  - No actual method needed - simple list collection
+- ✓ **Server.aggregate_insights()** - Aggregates statistics
+  - Computes average mean, std, drift across all clients
+  - Logs number of clients and data shapes
+- ✓ **Test with 3 clients** - Each with independent fake data
+  - Client 0: mean=-0.025, std=0.998
+  - Client 1: mean=0.031, std=0.946
+  - Client 2: mean=0.015, std=0.978
+  - Aggregated: mean=0.007, std=0.974, drift=0.000
+
+**Key Insight:** Stage 1 demonstrates local expertise without coordination - each client trains independently and shares only high-level insights (statistics), not raw data or weights.
+
 ## Stage 2 - Federated Learning Implementation ✓
 
 Minimal federated learning loop implemented with:
@@ -118,6 +146,7 @@ meta_learner = MetaLearner()
 ## Development Status
 
 - [x] Stage 0: Project skeleton and empty class definitions
+- [x] Stage 1: Local training and insight generation (3 clients, fake data, 2 experts each)
 - [x] Stage 2: Federated Learning implementation (FedAvg with 5 clients, 5 rounds)
 - [x] Stage 3: Scarcity-style Insight Exchange (knowledge sharing without raw weights)
 - [x] Stage 4: Expert Routing Architecture (StructureExpert + DriftExpert with adaptive Router)
