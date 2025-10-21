@@ -76,7 +76,7 @@ sf_hfe_v2/
 
 ---
 
-## 🎯 **What Makes This Organized:**
+## What Makes This Organized:
 
 ### 1. **Clear Separation**
    - **federated/** = Server-side only
@@ -98,7 +98,7 @@ sf_hfe_v2/
 
 ---
 
-## 🚀 **Quick Start**
+## Quick Start
 
 ```bash
 cd sf_hfe_v2
@@ -107,7 +107,7 @@ python main.py
 
 ---
 
-## 📚 **Module Guide**
+## Module Guide
 
 ### **federated/** - Server Components
 Developer operates this with **ZERO data**:
@@ -131,7 +131,7 @@ Users run this with their **local data**:
 
 ---
 
-## 🎓 **Import Examples**
+## Import Examples
 
 ```python
 # Import server (Developer side)
@@ -155,20 +155,20 @@ from data import ConceptDriftStream
 
 ---
 
-## 💪 **Production-Grade Features**
+## Production-Grade Features
 
-✅ **4,500+ lines** of real code  
-✅ **10 specialized experts** with unique architectures  
-✅ **3-tier memory** (Recent + Compressed + Critical)  
-✅ **Online MAML** meta-learning  
-✅ **EWC** anti-forgetting  
-✅ **UCB router** with entropy regularization  
-✅ **P2P gossip** with adaptive topology  
-✅ **Modular & extensible**  
+- 4,500+ lines of real code  
+- 10 specialized experts with unique architectures  
+- 3-tier memory (Recent + Compressed + Critical)  
+- Online MAML meta-learning  
+- EWC anti-forgetting  
+- UCB router with entropy regularization  
+- P2P gossip with adaptive topology  
+- Modular & extensible  
 
 ---
 
-## 📖 **Documentation**
+## Documentation
 
 - `STRUCTURE.md` - Detailed organization & file mapping
 - `config.py` - All configuration options
@@ -176,7 +176,7 @@ from data import ConceptDriftStream
 
 ---
 
-## 🎯 **Next Steps**
+## Next Steps
 
 1. Run the system: `python main.py`
 2. Explore expert categories in `moe/experts/`
@@ -186,4 +186,4 @@ from data import ConceptDriftStream
 
 ---
 
-**Clean, organized, production-ready!** 🎨
+**Clean, organized, production-ready!**
