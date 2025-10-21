@@ -12,6 +12,17 @@ import torch
 import numpy as np
 import logging
 from datetime import datetime
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Try to import plotly for 3D visualizations
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    print("Warning: Plotly not available. 3D visualizations will be skipped.")
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -324,16 +335,323 @@ def run_domain_test():
     logger.info(f"  Developer Data Used: ZERO (learned from insights only)")
     
     logger.info(f"\n{'='*80}")
+    logger.info("GENERATING VISUALIZATIONS")
+    logger.info(f"{'='*80}\n")
+    
+    # Create visualizations directory
+    viz_dir = "test_visualizations"
+    os.makedirs(viz_dir, exist_ok=True)
+    
+    # ========================================================================
+    # 2D VISUALIZATIONS
+    # ========================================================================
+    
+    logger.info("Creating 2D visualizations...")
+    
+    # 1. Learning Curves (Loss over time)
+    fig1, ax1 = plt.subplots(figsize=(12, 6), facecolor='#1A1A1A')
+    ax1.set_facecolor('#121212')
+    
+    colors_2d = ['#1F3A93', '#E74C3C', '#2ECC71']
+    for client_id, (domain, color) in enumerate(zip(domains, colors_2d)):
+        losses = all_losses[client_id]
+        # Filter out nan values
+        valid_losses = [l for l in losses if not np.isnan(l)]
+        if valid_losses:
+            ax1.plot(range(len(valid_losses)), valid_losses, 
+                    color=color, linewidth=2.5, label=f'{domain.title()}', alpha=0.9)
+    
+    ax1.set_xlabel('Batch', color='#EAEAEA', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Loss', color='#EAEAEA', fontsize=12, fontweight='bold')
+    ax1.set_title('Learning Curves: Loss Trajectories by Domain', 
+                 color='#EAEAEA', fontsize=14, fontweight='bold', pad=20)
+    ax1.grid(True, alpha=0.2, color='#9CA3AF', linestyle='--')
+    ax1.tick_params(colors='#9CA3AF', labelsize=10)
+    ax1.spines['bottom'].set_color('#243B55')
+    ax1.spines['left'].set_color('#243B55')
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
+    ax1.legend(facecolor='#1E293B', edgecolor='#243B55', labelcolor='#EAEAEA', 
+              fontsize=11, loc='upper right', framealpha=0.9)
+    plt.tight_layout()
+    plt.savefig(f"{viz_dir}/1_learning_curves.png", dpi=300, facecolor='#1A1A1A')
+    logger.info(f"  ✓ Saved: {viz_dir}/1_learning_curves.png")
+    plt.close()
+    
+    # 2. Expert Usage Distribution (Stacked Bar)
+    fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='#1A1A1A')
+    ax2.set_facecolor('#121212')
+    
+    expert_names = ['Geo', 'Temp', 'Recon', 'Causal', 'Drift', 
+                   'Gov', 'Consist', 'Peer', 'Meta', 'Memory']
+    x_pos = np.arange(len(domains))
+    width = 0.6
+    
+    # Prepare data
+    usage_matrix = np.zeros((len(domains), 10))
+    for client_id in range(len(domains)):
+        total = sum(expert_usage[client_id].values())
+        if total > 0:
+            for expert_id in range(10):
+                usage_matrix[client_id, expert_id] = (expert_usage[client_id][expert_id] / total) * 100
+    
+    # Color palette for experts
+    expert_colors = ['#1F3A93', '#3B5998', '#5F7FB8', '#E74C3C', '#C0392B',
+                    '#2ECC71', '#27AE60', '#F39C12', '#E67E22', '#9B59B6']
+    
+    bottom = np.zeros(len(domains))
+    for expert_id, (expert_name, color) in enumerate(zip(expert_names, expert_colors)):
+        values = usage_matrix[:, expert_id]
+        ax2.bar(x_pos, values, width, bottom=bottom, label=expert_name, 
+               color=color, alpha=0.9, edgecolor='#EAEAEA', linewidth=0.5)
+        bottom += values
+    
+    ax2.set_xlabel('Domain', color='#EAEAEA', fontsize=12, fontweight='bold')
+    ax2.set_ylabel('Expert Usage (%)', color='#EAEAEA', fontsize=12, fontweight='bold')
+    ax2.set_title('Expert Usage Distribution by Domain', 
+                 color='#EAEAEA', fontsize=14, fontweight='bold', pad=20)
+    ax2.set_xticks(x_pos)
+    ax2.set_xticklabels([d.title() for d in domains])
+    ax2.tick_params(colors='#9CA3AF', labelsize=10)
+    ax2.spines['bottom'].set_color('#243B55')
+    ax2.spines['left'].set_color('#243B55')
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.legend(facecolor='#1E293B', edgecolor='#243B55', labelcolor='#EAEAEA',
+              fontsize=9, loc='upper left', ncol=2, framealpha=0.9)
+    ax2.grid(True, alpha=0.2, color='#9CA3AF', axis='y', linestyle='--')
+    plt.tight_layout()
+    plt.savefig(f"{viz_dir}/2_expert_usage.png", dpi=300, facecolor='#1A1A1A')
+    logger.info(f"  ✓ Saved: {viz_dir}/2_expert_usage.png")
+    plt.close()
+    
+    # 3. Per-Expert Usage Comparison (Grouped Bar)
+    fig3, ax3 = plt.subplots(figsize=(16, 8), facecolor='#1A1A1A')
+    ax3.set_facecolor('#121212')
+    
+    x_experts = np.arange(10)
+    bar_width = 0.25
+    
+    for i, (client_id, domain, color) in enumerate(zip(range(3), domains, colors_2d)):
+        total = sum(expert_usage[client_id].values())
+        percentages = [(expert_usage[client_id][j] / total * 100) if total > 0 else 0 
+                      for j in range(10)]
+        offset = (i - 1) * bar_width
+        ax3.bar(x_experts + offset, percentages, bar_width, 
+               label=domain.title(), color=color, alpha=0.85,
+               edgecolor='#EAEAEA', linewidth=0.5)
+    
+    ax3.set_xlabel('Expert Type', color='#EAEAEA', fontsize=12, fontweight='bold')
+    ax3.set_ylabel('Usage Percentage', color='#EAEAEA', fontsize=12, fontweight='bold')
+    ax3.set_title('Per-Expert Usage Across Domains', 
+                 color='#EAEAEA', fontsize=14, fontweight='bold', pad=20)
+    ax3.set_xticks(x_experts)
+    ax3.set_xticklabels(expert_names, rotation=45, ha='right')
+    ax3.tick_params(colors='#9CA3AF', labelsize=10)
+    ax3.spines['bottom'].set_color('#243B55')
+    ax3.spines['left'].set_color('#243B55')
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    ax3.legend(facecolor='#1E293B', edgecolor='#243B55', labelcolor='#EAEAEA',
+              fontsize=11, loc='upper right', framealpha=0.9)
+    ax3.grid(True, alpha=0.2, color='#9CA3AF', axis='y', linestyle='--')
+    plt.tight_layout()
+    plt.savefig(f"{viz_dir}/3_per_expert_comparison.png", dpi=300, facecolor='#1A1A1A')
+    logger.info(f"  ✓ Saved: {viz_dir}/3_per_expert_comparison.png")
+    plt.close()
+    
+    # ========================================================================
+    # 3D VISUALIZATIONS (if Plotly available)
+    # ========================================================================
+    
+    if PLOTLY_AVAILABLE:
+        logger.info("\nCreating 3D visualizations...")
+        
+        # 4. 3D Loss Surface (Domain × Time × Loss)
+        # Create mesh grid
+        domain_indices = np.arange(3)
+        batch_indices = np.arange(len(all_losses[0]))
+        
+        # Create loss surface data
+        loss_surface = np.zeros((len(batch_indices), 3))
+        for client_id in range(3):
+            losses = all_losses[client_id]
+            # Replace nan with 0 for visualization
+            losses = [0 if np.isnan(l) else l for l in losses]
+            loss_surface[:, client_id] = losses
+        
+        fig4 = go.Figure(data=[go.Surface(
+            x=domain_indices,
+            y=batch_indices,
+            z=loss_surface.T,
+            colorscale=[
+                [0, '#2ECC71'],      # Green (low loss = good)
+                [0.5, '#F39C12'],    # Orange
+                [1, '#E74C3C']       # Red (high loss = bad)
+            ],
+            colorbar=dict(
+                title=dict(text='Loss', font=dict(color='#EAEAEA', size=12)),
+                tickfont=dict(color='#EAEAEA', size=10)
+            ),
+            contours=dict(
+                z=dict(show=True, usecolormap=True, highlightcolor='#EAEAEA', 
+                      project=dict(z=True))
+            )
+        )])
+        
+        fig4.update_layout(
+            title='3D Loss Surface: Domains vs Training Progress',
+            scene=dict(
+                xaxis=dict(title='Domain', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA',
+                          ticktext=[d.title() for d in domains],
+                          tickvals=[0, 1, 2]),
+                yaxis=dict(title='Batch Number', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA'),
+                zaxis=dict(title='Loss', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA'),
+                bgcolor='#121212',
+                camera=dict(eye=dict(x=1.7, y=1.7, z=1.4))
+            ),
+            paper_bgcolor='#1A1A1A',
+            font=dict(color='#EAEAEA', size=11),
+            title_font=dict(size=14, color='#EAEAEA'),
+            height=700,
+            width=1000
+        )
+        
+        fig4.write_html(f"{viz_dir}/4_3d_loss_surface.html")
+        logger.info(f"  ✓ Saved: {viz_dir}/4_3d_loss_surface.html")
+        
+        # 5. 3D Expert Usage Visualization
+        # Create 3D bar chart for expert usage
+        fig5 = go.Figure()
+        
+        for client_id, (domain, color) in enumerate(zip(domains, colors_2d)):
+            total = sum(expert_usage[client_id].values())
+            usage_pcts = [(expert_usage[client_id][j] / total * 100) if total > 0 else 0 
+                         for j in range(10)]
+            
+            fig5.add_trace(go.Scatter3d(
+                x=[client_id] * 10,
+                y=list(range(10)),
+                z=usage_pcts,
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color=usage_pcts,
+                    colorscale='Viridis',
+                    line=dict(color='#EAEAEA', width=1),
+                    opacity=0.9
+                ),
+                name=domain.title(),
+                text=[f"{en}: {up:.1f}%" for en, up in zip(expert_names, usage_pcts)],
+                hovertemplate='<b>%{text}</b><br>Domain: ' + domain.title() + '<extra></extra>'
+            ))
+        
+        fig5.update_layout(
+            title='3D Expert Usage Distribution',
+            scene=dict(
+                xaxis=dict(title='Domain', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA',
+                          ticktext=[d.title() for d in domains],
+                          tickvals=[0, 1, 2]),
+                yaxis=dict(title='Expert ID', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA',
+                          ticktext=expert_names,
+                          tickvals=list(range(10))),
+                zaxis=dict(title='Usage (%)', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA'),
+                bgcolor='#121212'
+            ),
+            paper_bgcolor='#1A1A1A',
+            font=dict(color='#EAEAEA', size=11),
+            title_font=dict(size=14, color='#EAEAEA'),
+            height=700,
+            width=1000,
+            showlegend=True,
+            legend=dict(
+                bgcolor='#1E293B',
+                bordercolor='#243B55',
+                font=dict(color='#EAEAEA')
+            )
+        )
+        
+        fig5.write_html(f"{viz_dir}/5_3d_expert_usage.html")
+        logger.info(f"  ✓ Saved: {viz_dir}/5_3d_expert_usage.html")
+        
+        # 6. 3D Training Trajectory
+        fig6 = go.Figure()
+        
+        for client_id, (domain, color) in enumerate(zip(domains, colors_2d)):
+            losses = all_losses[client_id]
+            # Replace nan with 0
+            losses = [0 if np.isnan(l) else l for l in losses]
+            batches = list(range(len(losses)))
+            domains_axis = [client_id] * len(losses)
+            
+            fig6.add_trace(go.Scatter3d(
+                x=domains_axis,
+                y=batches,
+                z=losses,
+                mode='lines+markers',
+                line=dict(color=color, width=4),
+                marker=dict(size=4, color=color),
+                name=domain.title(),
+                hovertemplate='<b>' + domain.title() + '</b><br>Batch: %{y}<br>Loss: %{z:.4f}<extra></extra>'
+            ))
+        
+        fig6.update_layout(
+            title='3D Training Trajectories by Domain',
+            scene=dict(
+                xaxis=dict(title='Domain', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA',
+                          ticktext=[d.title() for d in domains],
+                          tickvals=[0, 1, 2]),
+                yaxis=dict(title='Batch Number', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA'),
+                zaxis=dict(title='Loss', backgroundcolor='#121212', 
+                          gridcolor='#243B55', color='#EAEAEA'),
+                bgcolor='#121212',
+                camera=dict(eye=dict(x=1.5, y=-1.5, z=1.3))
+            ),
+            paper_bgcolor='#1A1A1A',
+            font=dict(color='#EAEAEA', size=11),
+            title_font=dict(size=14, color='#EAEAEA'),
+            height=700,
+            width=1000,
+            showlegend=True,
+            legend=dict(
+                bgcolor='#1E293B',
+                bordercolor='#243B55',
+                font=dict(color='#EAEAEA')
+            )
+        )
+        
+        fig6.write_html(f"{viz_dir}/6_3d_training_trajectory.html")
+        logger.info(f"  ✓ Saved: {viz_dir}/6_3d_training_trajectory.html")
+        
+    else:
+        logger.info("\n  ⚠ Plotly not available - 3D visualizations skipped")
+        logger.info("  Install with: pip install plotly")
+    
+    logger.info(f"\n{'='*80}")
+    logger.info(f"All visualizations saved to: {viz_dir}/")
+    logger.info(f"{'='*80}\n")
+    
+    logger.info(f"{'='*80}")
     logger.info("TEST COMPLETED SUCCESSFULLY")
     logger.info(f"End Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Log saved to: domain_test.log")
+    logger.info(f"Visualizations saved to: {viz_dir}/")
     logger.info(f"{'='*80}\n")
     
     return {
         'clients': clients,
         'server': server,
         'losses': all_losses,
-        'expert_usage': expert_usage
+        'expert_usage': expert_usage,
+        'visualization_dir': viz_dir
     }
 
 
