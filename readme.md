@@ -139,6 +139,38 @@ Round 5: mean=-0.1158, std=1.1294, lr=0.0100, updates=5
 
 **Key Innovation:** Meta-learner learns the data distribution across all clients and provides better initialization parameters, enabling faster convergence and adaptation to new tasks (Reptile-style meta-learning).
 
+## Stage 6 - P2P Gossip Mechanism ✓
+
+Implemented decentralized peer-to-peer expert weight exchange:
+- ✓ **Client.sync_with(peer, expert_idx)** - P2P weight averaging
+  - Directly exchanges expert weights with another client (no server)
+  - Averages weights: `new_weights = (my_weights + peer_weights) / 2`
+  - Both clients updated with averaged weights simultaneously
+  - Logs: "Client X: Synced ExpertType with Client Y (P2P gossip)"
+- ✓ **Helper methods** for expert weight management
+  - `get_expert_weights(expert_idx)` - Extract weights from specific expert
+  - `set_expert_weights(expert_idx, weights)` - Load weights into expert
+- ✓ **Random P2P pairing** after each training round
+  - Clients shuffled randomly for fairness
+  - Paired: (Client i, Client i+1) for i in [0, 2, 4, ...]
+  - Odd client sits out each round (different client each time)
+  - Random expert selection for each pair
+- ✓ **Decentralized knowledge sharing**
+  - P2P gossip happens independently of server
+  - Server still aggregates insights and meta-learning
+  - Combines centralized coordination with decentralized knowledge flow
+  
+**P2P Sync Examples (5 rounds):**
+```
+Round 1: Client 3 <-> Client 1 (DriftExpert), Client 0 <-> Client 2 (DriftExpert)
+Round 2: Client 4 <-> Client 2 (StructureExpert), Client 0 <-> Client 3 (DriftExpert)
+Round 3: Client 4 <-> Client 3 (StructureExpert), Client 0 <-> Client 1 (DriftExpert)
+Round 4: Client 4 <-> Client 0 (DriftExpert), Client 2 <-> Client 1 (StructureExpert)
+Round 5: Client 2 <-> Client 3 (DriftExpert), Client 1 <-> Client 4 (DriftExpert)
+```
+
+**Key Innovation:** Hybrid architecture combining centralized meta-learning with decentralized P2P gossip. Enables rapid knowledge dissemination without overloading the server.
+
 ## Components
 
 ### Expert
@@ -183,6 +215,7 @@ meta_learner = MetaLearner()
 - [x] Stage 3: Scarcity-style Insight Exchange (knowledge sharing without raw weights)
 - [x] Stage 4: Expert Routing Architecture (StructureExpert + DriftExpert with adaptive Router)
 - [x] Stage 5: Reptile-style Meta-Learning (adaptive global parameters across rounds)
+- [x] Stage 6: P2P Gossip Mechanism (decentralized expert weight exchange between peers)
 - [ ] Future: Advanced hierarchical optimization and real-world applications
 
 ## Requirements

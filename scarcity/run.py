@@ -529,6 +529,143 @@ def run_meta_learning(num_clients=5, num_rounds=5, input_dim=10, output_dim=1):
     return server, clients, meta_learner
 
 
+def run_p2p_gossip(num_clients=5, num_rounds=5, input_dim=10, output_dim=1):
+    """
+    Stage 6: P2P Gossip mechanism with peer-to-peer expert weight exchange.
+    
+    After local training, clients randomly pair up and exchange expert weights
+    directly (decentralized) without going through the server.
+    
+    Args:
+        num_clients: Number of federated learning clients
+        num_rounds: Number of global training rounds
+        input_dim: Input dimension for models
+        output_dim: Output dimension for models
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 80)
+    logger.info("STAGE 6: P2P Gossip Mechanism")
+    logger.info("=" * 80)
+    
+    # Create meta-learner
+    logger.info("Creating MetaLearner with meta-learning...")
+    meta_learner = MetaLearner()
+    
+    # Create clients with expert routing enabled
+    logger.info(f"Creating {num_clients} clients with Expert Routing...")
+    clients = [
+        Client(client_id=i, input_dim=input_dim, output_dim=output_dim, 
+               data_size=100, use_experts=True, router_strategy="variance") 
+        for i in range(num_clients)
+    ]
+    
+    # Create server with meta-learner
+    logger.info("Creating server with MetaLearner integration...")
+    server = Server(clients=clients, meta_learner=meta_learner, 
+                   input_dim=input_dim, output_dim=output_dim)
+    
+    logger.info("\n" + "=" * 80)
+    logger.info(f"Starting P2P Gossip Training: {num_rounds} global rounds")
+    logger.info("After training, clients pair up for P2P expert weight exchange")
+    logger.info("=" * 80 + "\n")
+    
+    import random
+    
+    # Run P2P gossip rounds
+    for round_num in range(1, num_rounds + 1):
+        logger.info(f"\n{'='*80}")
+        logger.info(f"P2P GOSSIP ROUND {round_num}/{num_rounds}")
+        logger.info(f"{'='*80}")
+        
+        # Phase 1: Select clients and broadcast
+        selected_clients = server.select_clients(round_num)
+        server.broadcast_model(selected_clients)
+        
+        # Phase 2: Local training with expert routing
+        logger.info("\n--- Local Training Phase ---")
+        insights = []
+        for client in selected_clients:
+            insight = client.generate_insight(epochs=5)
+            insights.append(insight)
+            
+            if 'selected_expert' in insight:
+                logger.info(
+                    f"  Client {client.client_id}: Trained with {insight['selected_expert']} - "
+                    f"Loss: {insight['final_loss']:.4f}"
+                )
+        
+        # Phase 3: P2P Gossip - Randomly pair clients for expert exchange
+        logger.info("\n--- P2P Gossip Phase ---")
+        
+        # Shuffle clients for random pairing
+        shuffled = selected_clients.copy()
+        random.shuffle(shuffled)
+        
+        sync_operations = []
+        
+        # Pair clients (if odd number, last one doesn't sync this round)
+        for i in range(0, len(shuffled) - 1, 2):
+            client1 = shuffled[i]
+            client2 = shuffled[i + 1]
+            
+            # Randomly select which expert to sync
+            expert_idx = random.randint(0, len(client1.experts) - 1)
+            
+            # Sync expert weights between peers
+            sync_info = client1.sync_with(client2, expert_idx=expert_idx)
+            
+            if sync_info:
+                sync_operations.append(sync_info)
+                logger.info(
+                    f"  Client {client1.client_id} <-> Client {client2.client_id}: "
+                    f"Synced {sync_info['expert_synced']}"
+                )
+        
+        if len(shuffled) % 2 == 1:
+            logger.info(f"  Client {shuffled[-1].client_id}: No peer this round (odd number)")
+        
+        logger.info(f"\n  Total P2P syncs: {len(sync_operations)}")
+        
+        # Phase 4: Server aggregates insights and updates meta-params
+        logger.info("\n--- Server Aggregation Phase ---")
+        server.memory.extend(insights)
+        
+        if server.meta_learner:
+            aggregated_knowledge = server.meta_learner.aggregate(insights)
+            updated_params = server.meta_learner.update_global_params(insights)
+            meta_params = server.meta_learner.broadcast_params()
+            
+            for client in selected_clients:
+                client.receive_meta_params(meta_params)
+        
+        # Phase 5: Evaluation
+        metrics = server.evaluate_global_model()
+        
+        logger.info(
+            f"\nRound {round_num} Summary:\n"
+            f"  Global Loss: {metrics['avg_loss']:.4f}\n"
+            f"  P2P Syncs: {len(sync_operations)}\n"
+            f"  Insights Collected: {len(insights)}\n"
+            f"  Total Memory: {len(server.memory)}"
+        )
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("P2P Gossip Training Complete!")
+    logger.info("=" * 80)
+    
+    # Summary
+    logger.info("\nFinal System State:")
+    logger.info(f"  Total Insights: {len(server.memory)}")
+    logger.info(f"  MetaLearner Updates: {meta_learner.global_params['num_updates']}")
+    
+    summary = meta_learner.summarize()
+    logger.info(f"  Final Meta-Mean: {summary['global_params']['mean']:.4f}")
+    logger.info(f"  Final Meta-Std: {summary['global_params']['std']:.4f}")
+    
+    return server, clients, meta_learner
+
+
 def main():
     """
     Main execution function for the Scarcity Framework.
@@ -546,7 +683,7 @@ def main():
     OUTPUT_DIM = 1
     
     # Choose which mode to run
-    MODE = "meta_learning"  # Options: "stage1", "federated_learning", "insight_exchange", "expert_routing", or "meta_learning"
+    MODE = "p2p_gossip"  # Options: "stage1", "federated_learning", "insight_exchange", "expert_routing", "meta_learning", or "p2p_gossip"
     
     if MODE == "stage1":
         logger.info("\nRunning in STAGE 1 mode - Simple Training & Insights")
@@ -586,6 +723,16 @@ def main():
         logger.info("\nRunning in META-LEARNING mode (Stage 5)")
         logger.info("=" * 80)
         server, clients, meta_learner = run_meta_learning(
+            num_clients=NUM_CLIENTS,
+            num_rounds=NUM_ROUNDS,
+            input_dim=INPUT_DIM,
+            output_dim=OUTPUT_DIM
+        )
+    
+    elif MODE == "p2p_gossip":
+        logger.info("\nRunning in P2P GOSSIP mode (Stage 6)")
+        logger.info("=" * 80)
+        server, clients, meta_learner = run_p2p_gossip(
             num_clients=NUM_CLIENTS,
             num_rounds=NUM_ROUNDS,
             input_dim=INPUT_DIM,

@@ -302,4 +302,93 @@ class Client:
             f"lr={meta_params.get('meta_lr', 0.01):.4f}, "
             f"updates={meta_params.get('meta_updates', 0)}"
         )
+    
+    def get_expert_weights(self, expert_idx: int):
+        """
+        Get weights from a specific expert.
+        
+        Args:
+            expert_idx: Index of the expert (0, 1, etc.)
+            
+        Returns:
+            Expert model weights (state_dict)
+        """
+        if self.experts and expert_idx < len(self.experts):
+            expert = self.experts[expert_idx]
+            return deepcopy(expert.model.state_dict())
+        return None
+    
+    def set_expert_weights(self, expert_idx: int, weights):
+        """
+        Set weights for a specific expert.
+        
+        Args:
+            expert_idx: Index of the expert
+            weights: Model weights (state_dict) to set
+        """
+        if self.experts and expert_idx < len(self.experts):
+            expert = self.experts[expert_idx]
+            expert.model.load_state_dict(deepcopy(weights))
+    
+    def sync_with(self, peer_client, expert_idx: int = None):
+        """
+        Peer-to-peer synchronization: average expert weights with another client.
+        
+        This implements a gossip-style P2P mechanism where clients can directly
+        exchange knowledge without going through the central server.
+        
+        Args:
+            peer_client: Another Client object to sync with
+            expert_idx: Index of expert to sync (None = random selection)
+            
+        Returns:
+            Dictionary with sync information
+        """
+        if not self.use_experts or not self.experts:
+            self.logger.warning(f"Client {self.client_id}: Cannot sync - no experts available")
+            return None
+        
+        if not peer_client.use_experts or not peer_client.experts:
+            self.logger.warning(f"Client {self.client_id}: Cannot sync - peer has no experts")
+            return None
+        
+        # Select which expert to sync (random if not specified)
+        if expert_idx is None:
+            import random
+            expert_idx = random.randint(0, len(self.experts) - 1)
+        
+        if expert_idx >= len(self.experts) or expert_idx >= len(peer_client.experts):
+            self.logger.warning(f"Client {self.client_id}: Invalid expert index {expert_idx}")
+            return None
+        
+        # Get expert names
+        my_expert = self.experts[expert_idx]
+        peer_expert = peer_client.experts[expert_idx]
+        expert_name = type(my_expert).__name__
+        
+        # Get current weights from both clients
+        my_weights = my_expert.model.state_dict()
+        peer_weights = peer_expert.model.state_dict()
+        
+        # Average the weights (gossip-style)
+        averaged_weights = {}
+        for key in my_weights.keys():
+            averaged_weights[key] = (my_weights[key] + peer_weights[key]) / 2.0
+        
+        # Update both clients with averaged weights
+        my_expert.model.load_state_dict(deepcopy(averaged_weights))
+        peer_expert.model.load_state_dict(deepcopy(averaged_weights))
+        
+        sync_info = {
+            "client_id": self.client_id,
+            "peer_id": peer_client.client_id,
+            "expert_synced": expert_name,
+            "expert_idx": expert_idx
+        }
+        
+        self.logger.info(
+            f"Client {self.client_id}: Synced {expert_name} with Client {peer_client.client_id} (P2P gossip)"
+        )
+        
+        return sync_info
 
