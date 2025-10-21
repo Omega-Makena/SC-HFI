@@ -6,6 +6,7 @@ It aggregates client updates and manages the global model.
 """
 
 import logging
+import numpy as np
 import torch
 import torch.nn as nn
 from copy import deepcopy
@@ -19,13 +20,14 @@ class Server:
     clients, aggregating their updates, and maintaining the global model(s).
     """
     
-    def __init__(self, clients: list, input_dim: int = 10, output_dim: int = 1, 
-                 client_fraction: float = 1.0, **kwargs):
+    def __init__(self, clients: list, meta_learner=None, input_dim: int = 10, 
+                 output_dim: int = 1, client_fraction: float = 1.0, **kwargs):
         """
         Initialize the Server.
         
         Args:
             clients: List of Client objects in the federation
+            meta_learner: MetaLearner instance for insight aggregation
             input_dim: Input dimension for the global model
             output_dim: Output dimension for the global model
             client_fraction: Fraction of clients to select per round
@@ -34,12 +36,15 @@ class Server:
         self.clients = clients
         self.num_clients = len(clients)
         self.client_fraction = client_fraction
+        self.meta_learner = meta_learner
+        self.memory = []  # Store all insights for knowledge accumulation
         self.logger = logging.getLogger(f"{__name__}.Server")
         self.logger.info(f"Initializing Server with {self.num_clients} clients")
         
         # Initialize global model
         self.global_model = nn.Linear(input_dim, output_dim)
         self.logger.info(f"Global model initialized: Linear({input_dim}, {output_dim})")
+        self.logger.info(f"Server memory initialized for insight storage")
         
     def aggregate_models(self, client_updates):
         """
@@ -172,5 +177,61 @@ class Server:
         metrics = self.evaluate_global_model()
         
         self.logger.info(f"Server: Round {round_num} complete - Global loss: {metrics['avg_loss']:.4f}")
+        return metrics
+    
+    def run_insight_round(self, round_num: int):
+        """
+        Execute one round of Scarcity-style Insight Exchange.
+        
+        Instead of exchanging raw weights, clients generate and share
+        structured insights about their local learning.
+        
+        Args:
+            round_num: Current round number
+            
+        Returns:
+            Dictionary with aggregated metrics and insights
+        """
+        self.logger.info(f"Server: Starting INSIGHT EXCHANGE round {round_num}")
+        
+        # 1. Select clients for this round
+        selected_clients = self.select_clients(round_num)
+        
+        # 2. Broadcast current global model (for local training baseline)
+        self.broadcast_model(selected_clients)
+        
+        # 3. Each client generates insights (not raw weights!)
+        insights = []
+        for client in selected_clients:
+            insight = client.generate_insight(epochs=5)
+            insights.append(insight)
+            self.logger.info(
+                f"Server: Received insight from Client {client.client_id} - "
+                f"uncertainty={insight['uncertainty']:.4f}"
+            )
+        
+        # 4. Store insights in memory
+        self.memory.extend(insights)
+        self.logger.info(f"Server: Stored {len(insights)} insights in memory (total: {len(self.memory)})")
+        
+        # 5. Use MetaLearner to aggregate insights
+        if self.meta_learner:
+            aggregated_knowledge = self.meta_learner.aggregate(insights)
+            self.logger.info(f"Server: MetaLearner aggregated knowledge from {len(insights)} clients")
+        else:
+            self.logger.warning("Server: No MetaLearner available, skipping aggregation")
+            aggregated_knowledge = {"avg_uncertainty": np.mean([i["uncertainty"] for i in insights])}
+        
+        # 6. Evaluate global model
+        metrics = self.evaluate_global_model()
+        metrics["aggregated_knowledge"] = aggregated_knowledge
+        metrics["num_insights"] = len(insights)
+        
+        self.logger.info(
+            f"Server: Round {round_num} complete - "
+            f"Global loss: {metrics['avg_loss']:.4f}, "
+            f"Avg uncertainty: {aggregated_knowledge.get('avg_uncertainty', 0):.4f}"
+        )
+        
         return metrics
 

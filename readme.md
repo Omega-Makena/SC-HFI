@@ -36,6 +36,22 @@ Minimal federated learning loop implemented with:
 - ✓ No centralized data - fully federated architecture
 - ✓ Comprehensive logging at each step
 
+## Stage 3 - Scarcity-Style Insight Exchange ✓
+
+Transformed FL into knowledge-sharing system:
+- ✓ Client.generate_insight() creates structured insights instead of raw weights
+  - Insight structure: `{client_id, mean_grad, uncertainty, loss_improvement, ...}`
+  - Captures gradient dynamics, uncertainty scores, and learning progress
+- ✓ Server.run_insight_round() orchestrates insight exchange
+  - Stores all insights in `self.memory` for knowledge accumulation (25 insights)
+  - No raw weight sharing - only high-level learning metadata
+- ✓ MetaLearner.aggregate() processes insights
+  - Computes average uncertainty across clients
+  - Identifies high/low uncertainty clients for adaptive strategies
+  - Maintains insight history for meta-learning
+- ✓ Key Innovation: Share knowledge, not data or raw weights
+- ✓ Successfully tested with 5 clients × 5 rounds = 25 insights collected
+
 ## Components
 
 ### Expert
@@ -51,7 +67,7 @@ Represents a federated learning participant that holds local data and performs l
 Coordinates the federated learning process, aggregates client updates, and manages global models.
 
 ### MetaLearner
-Implements meta-learning to optimize the ensemble system across tasks and experts.
+Implements meta-learning to optimize the ensemble system across tasks and experts. In Stage 3, it aggregates structured insights from clients instead of raw model weights, identifying learning patterns and uncertainty distributions across the federation.
 
 ## Usage
 
@@ -76,8 +92,9 @@ meta_learner = MetaLearner()
 
 - [x] Stage 0: Project skeleton and empty class definitions
 - [x] Stage 2: Federated Learning implementation (FedAvg with 5 clients, 5 rounds)
-- [ ] Stage 3: Expert ensemble, Router, and MetaLearner integration
-- [ ] Stage 4: Optimization and scaling
+- [x] Stage 3: Scarcity-style Insight Exchange (knowledge sharing without raw weights)
+- [ ] Stage 4: Expert ensemble and Router integration
+- [ ] Stage 5: Advanced meta-learning and optimization
 
 ## Requirements
 

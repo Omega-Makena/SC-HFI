@@ -8,6 +8,7 @@ It initializes logging and orchestrates the system components.
 import logging
 import sys
 from pathlib import Path
+import numpy as np
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -102,6 +103,85 @@ def run_federated_learning(num_clients=5, num_rounds=5, input_dim=10, output_dim
     return server, clients
 
 
+def run_insight_exchange(num_clients=5, num_rounds=5, input_dim=10, output_dim=1):
+    """
+    Run the Scarcity-style Insight Exchange loop.
+    
+    Instead of sharing raw model weights, clients generate and share
+    structured insights about their local learning dynamics.
+    
+    Args:
+        num_clients: Number of federated learning clients
+        num_rounds: Number of global training rounds
+        input_dim: Input dimension for models
+        output_dim: Output dimension for models
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 80)
+    logger.info("STAGE 3: Scarcity-Style Insight Exchange")
+    logger.info("=" * 80)
+    
+    # Create meta-learner
+    logger.info("Creating MetaLearner for insight aggregation...")
+    meta_learner = MetaLearner()
+    
+    # Create clients with local data
+    logger.info(f"Creating {num_clients} clients with local data...")
+    clients = [
+        Client(client_id=i, input_dim=input_dim, output_dim=output_dim, data_size=100) 
+        for i in range(num_clients)
+    ]
+    
+    # Create server with meta-learner
+    logger.info("Creating server with MetaLearner integration...")
+    server = Server(clients=clients, meta_learner=meta_learner, 
+                   input_dim=input_dim, output_dim=output_dim)
+    
+    logger.info("\n" + "=" * 80)
+    logger.info(f"Starting Insight Exchange: {num_rounds} global rounds")
+    logger.info("Key Innovation: Sharing insights, not raw weights!")
+    logger.info("=" * 80 + "\n")
+    
+    # Run insight exchange rounds
+    for round_num in range(1, num_rounds + 1):
+        logger.info(f"\n{'='*80}")
+        logger.info(f"INSIGHT EXCHANGE ROUND {round_num}/{num_rounds}")
+        logger.info(f"{'='*80}")
+        
+        metrics = server.run_insight_round(round_num)
+        knowledge = metrics["aggregated_knowledge"]
+        
+        logger.info(
+            f"\nRound {round_num} Summary:\n"
+            f"  Global Loss: {metrics['avg_loss']:.4f}\n"
+            f"  Avg Uncertainty: {knowledge['avg_uncertainty']:.4f} (±{knowledge['std_uncertainty']:.4f})\n"
+            f"  Avg Gradient: {knowledge['avg_mean_grad']:.4f}\n"
+            f"  Insights Collected: {metrics['num_insights']}\n"
+            f"  Total Memory Size: {len(server.memory)} insights\n"
+            f"  High Uncertainty Clients: {knowledge['high_uncertainty_clients']}\n"
+            f"  Low Uncertainty Clients: {knowledge['low_uncertainty_clients']}"
+        )
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("Insight Exchange Complete!")
+    logger.info("=" * 80)
+    
+    # Summary statistics
+    logger.info("\n" + "Final System State:")
+    logger.info(f"  Total Insights Stored: {len(server.memory)}")
+    logger.info(f"  MetaLearner History Size: {len(meta_learner.insight_history)}")
+    
+    # Analyze insight patterns
+    if server.memory:
+        all_uncertainties = [i["uncertainty"] for i in server.memory]
+        all_improvements = [i["loss_improvement"] for i in server.memory]
+        logger.info(f"  Overall Avg Uncertainty: {np.mean(all_uncertainties):.4f}")
+        logger.info(f"  Overall Avg Loss Improvement: {np.mean(all_improvements):.4f}")
+    
+    return server, clients, meta_learner
+
+
 def main():
     """
     Main execution function for the Scarcity Framework.
@@ -118,20 +198,31 @@ def main():
     INPUT_DIM = 10
     OUTPUT_DIM = 1
     
-    # Run federated learning
-    server, clients = run_federated_learning(
-        num_clients=NUM_CLIENTS,
-        num_rounds=NUM_ROUNDS,
-        input_dim=INPUT_DIM,
-        output_dim=OUTPUT_DIM
-    )
+    # Choose which mode to run
+    MODE = "insight_exchange"  # Options: "federated_learning" or "insight_exchange"
+    
+    if MODE == "federated_learning":
+        logger.info("\nRunning in FEDERATED LEARNING mode (Stage 2)")
+        logger.info("=" * 80)
+        server, clients = run_federated_learning(
+            num_clients=NUM_CLIENTS,
+            num_rounds=NUM_ROUNDS,
+            input_dim=INPUT_DIM,
+            output_dim=OUTPUT_DIM
+        )
+    elif MODE == "insight_exchange":
+        logger.info("\nRunning in INSIGHT EXCHANGE mode (Stage 3)")
+        logger.info("=" * 80)
+        server, clients, meta_learner = run_insight_exchange(
+            num_clients=NUM_CLIENTS,
+            num_rounds=NUM_ROUNDS,
+            input_dim=INPUT_DIM,
+            output_dim=OUTPUT_DIM
+        )
     
     logger.info("\n" + "=" * 80)
     logger.info("Framework execution completed successfully!")
     logger.info("=" * 80)
-    
-    # Note: Expert, Router, and MetaLearner will be integrated in Stage 3
-    logger.info("\nNote: Expert ensemble, Router, and MetaLearner will be integrated in Stage 3")
 
 
 if __name__ == "__main__":

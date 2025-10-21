@@ -89,6 +89,77 @@ class Client:
         
         return self.get_weights()
     
+    def generate_insight(self, epochs: int = 5, lr: float = 0.01):
+        """
+        Train locally and generate structured insight instead of raw weights.
+        
+        This is the Scarcity Framework's approach: share knowledge, not data or raw weights.
+        
+        Args:
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Structured insight dictionary with metadata about local learning
+        """
+        self.logger.info(f"Client {self.client_id}: Generating insight through local training")
+        
+        criterion = nn.MSELoss()
+        optimizer = optim.SGD(self.model.parameters(), lr=lr)
+        
+        # Track gradients and losses
+        gradient_norms = []
+        losses = []
+        
+        for epoch in range(epochs):
+            # Forward pass
+            outputs = self.model(self.X_train)
+            loss = criterion(outputs, self.y_train)
+            losses.append(loss.item())
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            
+            # Collect gradient information
+            grad_norm = 0.0
+            for param in self.model.parameters():
+                if param.grad is not None:
+                    grad_norm += param.grad.norm().item() ** 2
+            grad_norm = grad_norm ** 0.5
+            gradient_norms.append(grad_norm)
+            
+            optimizer.step()
+        
+        # Calculate insight metrics
+        mean_grad = np.mean(gradient_norms)
+        std_grad = np.std(gradient_norms)
+        loss_improvement = losses[0] - losses[-1]
+        final_loss = losses[-1]
+        
+        # Uncertainty score: based on gradient variance and loss stability
+        # Higher uncertainty = more volatile training
+        uncertainty_score = std_grad / (mean_grad + 1e-8) + abs(np.std(losses))
+        
+        insight = {
+            "client_id": self.client_id,
+            "mean_grad": float(mean_grad),
+            "std_grad": float(std_grad),
+            "uncertainty": float(uncertainty_score),
+            "loss_improvement": float(loss_improvement),
+            "final_loss": float(final_loss),
+            "num_samples": len(self.X_train),
+            "epochs_trained": epochs
+        }
+        
+        self.logger.info(
+            f"Client {self.client_id}: Generated insight - "
+            f"mean_grad={mean_grad:.4f}, uncertainty={uncertainty_score:.4f}, "
+            f"loss: {losses[0]:.4f} -> {final_loss:.4f}"
+        )
+        
+        return insight
+    
     def evaluate(self):
         """
         Evaluate the model on local data.
