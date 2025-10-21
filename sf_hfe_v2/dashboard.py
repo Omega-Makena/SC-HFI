@@ -11,6 +11,9 @@ import logging
 from contextlib import redirect_stdout
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
+import plotly.express as px
+from mpl_toolkits.mplot3d import Axes3D
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -333,27 +336,296 @@ $ python main.py
             st.markdown(f"- Specialized: {num_clients * 3}")
         
         with chart_container:
-            st.markdown("### Expected Learning Curve")
+            # 2D Visualizations
+            st.markdown("### 2D: Learning Curves (Per-Client)")
             
-            # Simulated learning curve
+            # Multi-client learning curves
             batches = np.arange(num_batches)
-            loss_curve = 2.0 * np.exp(-batches / (num_batches * 0.3)) + 0.3
-            
-            fig, ax = plt.subplots(figsize=(6, 4), facecolor='#1A1A1A')
+            fig_2d, ax = plt.subplots(figsize=(8, 5), facecolor='#1A1A1A')
             ax.set_facecolor('#121212')
-            ax.plot(batches, loss_curve, color='#1F3A93', linewidth=2, label='Expected Loss')
-            ax.set_xlabel('Batch', color='#EAEAEA')
-            ax.set_ylabel('Loss', color='#EAEAEA')
-            ax.set_title('Projected Learning Curve', color='#EAEAEA', fontweight='bold')
+            
+            colors = ['#1F3A93', '#E74C3C', '#2ECC71', '#F39C12', '#9B59B6']
+            for i in range(num_clients):
+                noise = np.random.uniform(0.9, 1.1)
+                loss_curve = 2.0 * noise * np.exp(-batches / (num_batches * 0.3)) + 0.2 + np.random.uniform(0, 0.2)
+                ax.plot(batches, loss_curve, color=colors[i % len(colors)], 
+                       linewidth=2, label=f'Client {i+1}', alpha=0.8)
+            
+            ax.set_xlabel('Batch', color='#EAEAEA', fontsize=11)
+            ax.set_ylabel('Loss', color='#EAEAEA', fontsize=11)
+            ax.set_title('Per-Client Loss Trajectories', color='#EAEAEA', fontweight='bold', fontsize=13)
             ax.grid(True, alpha=0.2, color='#9CA3AF')
             ax.tick_params(colors='#9CA3AF')
             ax.spines['bottom'].set_color('#243B55')
             ax.spines['left'].set_color('#243B55')
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-            ax.legend(facecolor='#1E293B', edgecolor='#243B55', labelcolor='#EAEAEA')
+            ax.legend(facecolor='#1E293B', edgecolor='#243B55', labelcolor='#EAEAEA', loc='upper right')
             
-            st.pyplot(fig)
+            st.pyplot(fig_2d)
+            
+            # 2D: Expert Performance Heatmap
+            st.markdown("### 2D: Expert Performance Heatmap")
+            
+            expert_names = ['Geo', 'Temp', 'Recon', 'Causal', 'Drift', 
+                           'Gov', 'Consist', 'PeerSel', 'MetaAdapt', 'MemCons']
+            performance = np.random.uniform(0.6, 0.95, (num_clients, 10))
+            
+            fig_heatmap = go.Figure(data=go.Heatmap(
+                z=performance,
+                x=expert_names,
+                y=[f'Client {i+1}' for i in range(num_clients)],
+                colorscale=[
+                    [0, '#E74C3C'],      # Red (low performance)
+                    [0.5, '#F39C12'],    # Orange
+                    [1, '#2ECC71']       # Green (high performance)
+                ],
+                colorbar=dict(
+                    title='Performance',
+                    titlefont=dict(color='#EAEAEA'),
+                    tickfont=dict(color='#EAEAEA')
+                ),
+                text=np.round(performance, 2),
+                texttemplate='%{text}',
+                textfont={"size": 10, "color": "#EAEAEA"}
+            ))
+            
+            fig_heatmap.update_layout(
+                title='Expert Performance by Client',
+                xaxis=dict(title='Experts', color='#EAEAEA', gridcolor='#243B55'),
+                yaxis=dict(title='Clients', color='#EAEAEA', gridcolor='#243B55'),
+                paper_bgcolor='#1A1A1A',
+                plot_bgcolor='#121212',
+                font=dict(color='#EAEAEA', size=11),
+                title_font=dict(size=14, color='#EAEAEA')
+            )
+            
+            st.plotly_chart(fig_heatmap, use_container_width=True)
+            
+            # 3D Visualizations Section
+            st.markdown("---")
+            st.markdown("## 3D Visualizations")
+            
+            # 3D: Expert Embedding Space
+            st.markdown("### 3D: Expert Embedding Space (t-SNE Projection)")
+            
+            # Simulate expert embeddings in 3D space
+            np.random.seed(42)
+            n_experts_total = num_clients * 10
+            
+            # Create clustered embeddings for different expert types
+            embeddings_3d = []
+            expert_labels = []
+            expert_colors = []
+            
+            color_map = {
+                'Structure': '#1F3A93',
+                'Intelligence': '#E74C3C',
+                'Guardrail': '#2ECC71',
+                'Specialized': '#F39C12'
+            }
+            
+            for client_id in range(num_clients):
+                # Structure experts (clustered)
+                embeddings_3d.extend(np.random.randn(3, 3) * 0.5 + [1, 1, 1])
+                expert_labels.extend([f'C{client_id+1}-Geo', f'C{client_id+1}-Temp', f'C{client_id+1}-Recon'])
+                expert_colors.extend([color_map['Structure']] * 3)
+                
+                # Intelligence experts
+                embeddings_3d.extend(np.random.randn(2, 3) * 0.5 + [-1, 1, 0])
+                expert_labels.extend([f'C{client_id+1}-Causal', f'C{client_id+1}-Drift'])
+                expert_colors.extend([color_map['Intelligence']] * 2)
+                
+                # Guardrail experts
+                embeddings_3d.extend(np.random.randn(2, 3) * 0.5 + [0, -1, 1])
+                expert_labels.extend([f'C{client_id+1}-Gov', f'C{client_id+1}-Consist'])
+                expert_colors.extend([color_map['Guardrail']] * 2)
+                
+                # Specialized experts
+                embeddings_3d.extend(np.random.randn(3, 3) * 0.5 + [-1, 0, -1])
+                expert_labels.extend([f'C{client_id+1}-Peer', f'C{client_id+1}-Meta', f'C{client_id+1}-Mem'])
+                expert_colors.extend([color_map['Specialized']] * 3)
+            
+            embeddings_3d = np.array(embeddings_3d)
+            
+            fig_3d_embed = go.Figure(data=[go.Scatter3d(
+                x=embeddings_3d[:, 0],
+                y=embeddings_3d[:, 1],
+                z=embeddings_3d[:, 2],
+                mode='markers',
+                marker=dict(
+                    size=8,
+                    color=expert_colors,
+                    opacity=0.8,
+                    line=dict(color='#EAEAEA', width=0.5)
+                ),
+                text=expert_labels,
+                hovertemplate='<b>%{text}</b><br>X: %{x:.2f}<br>Y: %{y:.2f}<br>Z: %{z:.2f}<extra></extra>'
+            )])
+            
+            fig_3d_embed.update_layout(
+                title='Expert Embeddings in 3D Latent Space',
+                scene=dict(
+                    xaxis=dict(title='Dimension 1', backgroundcolor='#121212', gridcolor='#243B55', color='#EAEAEA'),
+                    yaxis=dict(title='Dimension 2', backgroundcolor='#121212', gridcolor='#243B55', color='#EAEAEA'),
+                    zaxis=dict(title='Dimension 3', backgroundcolor='#121212', gridcolor='#243B55', color='#EAEAEA'),
+                    bgcolor='#121212'
+                ),
+                paper_bgcolor='#1A1A1A',
+                font=dict(color='#EAEAEA', size=11),
+                title_font=dict(size=14, color='#EAEAEA'),
+                height=600
+            )
+            
+            st.plotly_chart(fig_3d_embed, use_container_width=True)
+            
+            # 3D: Client-Expert-Performance Surface
+            st.markdown("### 3D: Performance Surface (Client x Expert x Time)")
+            
+            # Create 3D surface plot
+            client_range = np.arange(num_clients)
+            batch_range = np.linspace(0, num_batches, 20)
+            
+            # Generate performance surface
+            C, B = np.meshgrid(client_range, batch_range)
+            performance_surface = 2.0 * np.exp(-B / (num_batches * 0.3)) + 0.3
+            performance_surface = performance_surface + np.random.randn(*performance_surface.shape) * 0.1
+            
+            fig_3d_surface = go.Figure(data=[go.Surface(
+                x=C,
+                y=B,
+                z=performance_surface,
+                colorscale=[
+                    [0, '#2ECC71'],      # Green (low loss = good)
+                    [0.5, '#F39C12'],    # Orange
+                    [1, '#E74C3C']       # Red (high loss = bad)
+                ],
+                colorbar=dict(
+                    title='Loss',
+                    titlefont=dict(color='#EAEAEA'),
+                    tickfont=dict(color='#EAEAEA')
+                ),
+                contours=dict(
+                    z=dict(show=True, usecolormap=True, highlightcolor='#EAEAEA', project=dict(z=True))
+                )
+            )])
+            
+            fig_3d_surface.update_layout(
+                title='Loss Surface: Clients vs Training Progress',
+                scene=dict(
+                    xaxis=dict(title='Client ID', backgroundcolor='#121212', gridcolor='#243B55', color='#EAEAEA'),
+                    yaxis=dict(title='Batch Number', backgroundcolor='#121212', gridcolor='#243B55', color='#EAEAEA'),
+                    zaxis=dict(title='Loss', backgroundcolor='#121212', gridcolor='#243B55', color='#EAEAEA'),
+                    bgcolor='#121212',
+                    camera=dict(eye=dict(x=1.5, y=1.5, z=1.3))
+                ),
+                paper_bgcolor='#1A1A1A',
+                font=dict(color='#EAEAEA', size=11),
+                title_font=dict(size=14, color='#EAEAEA'),
+                height=600
+            )
+            
+            st.plotly_chart(fig_3d_surface, use_container_width=True)
+            
+            # 3D: P2P Network Topology
+            if enable_p2p:
+                st.markdown("### 3D: P2P Gossip Network Topology")
+                
+                # Create 3D network graph
+                np.random.seed(42)
+                positions = np.random.randn(num_clients, 3) * 2
+                
+                # Create edges (connections between clients)
+                edge_x, edge_y, edge_z = [], [], []
+                for i in range(num_clients):
+                    for j in range(i+1, num_clients):
+                        if np.random.rand() > 0.5:  # Random connections
+                            edge_x.extend([positions[i, 0], positions[j, 0], None])
+                            edge_y.extend([positions[i, 1], positions[j, 1], None])
+                            edge_z.extend([positions[i, 2], positions[j, 2], None])
+                
+                # Create edge trace
+                edge_trace = go.Scatter3d(
+                    x=edge_x, y=edge_y, z=edge_z,
+                    mode='lines',
+                    line=dict(color='#243B55', width=2),
+                    hoverinfo='none',
+                    opacity=0.5
+                )
+                
+                # Create node trace
+                node_trace = go.Scatter3d(
+                    x=positions[:, 0],
+                    y=positions[:, 1],
+                    z=positions[:, 2],
+                    mode='markers+text',
+                    marker=dict(
+                        size=15,
+                        color='#1F3A93',
+                        line=dict(color='#EAEAEA', width=2),
+                        opacity=0.9
+                    ),
+                    text=[f'C{i+1}' for i in range(num_clients)],
+                    textposition='top center',
+                    textfont=dict(color='#EAEAEA', size=12),
+                    hovertemplate='<b>Client %{text}</b><extra></extra>'
+                )
+                
+                fig_3d_network = go.Figure(data=[edge_trace, node_trace])
+                
+                fig_3d_network.update_layout(
+                    title='P2P Gossip Network (3D Topology)',
+                    scene=dict(
+                        xaxis=dict(title='', showgrid=False, showticklabels=False, backgroundcolor='#121212'),
+                        yaxis=dict(title='', showgrid=False, showticklabels=False, backgroundcolor='#121212'),
+                        zaxis=dict(title='', showgrid=False, showticklabels=False, backgroundcolor='#121212'),
+                        bgcolor='#121212'
+                    ),
+                    showlegend=False,
+                    paper_bgcolor='#1A1A1A',
+                    font=dict(color='#EAEAEA'),
+                    title_font=dict(size=14, color='#EAEAEA'),
+                    height=600
+                )
+                
+                st.plotly_chart(fig_3d_network, use_container_width=True)
+            
+            # 2D: Memory Tier Distribution
+            st.markdown("---")
+            st.markdown("### 2D: Memory Tier Distribution")
+            
+            memory_tiers = ['Recent\nBuffer', 'Compressed\nMemory', 'Critical\nAnchors']
+            memory_sizes = [
+                np.random.randint(80, 120, num_clients),
+                np.random.randint(150, 200, num_clients),
+                np.random.randint(20, 40, num_clients)
+            ]
+            
+            fig_memory, ax_mem = plt.subplots(figsize=(8, 5), facecolor='#1A1A1A')
+            ax_mem.set_facecolor('#121212')
+            
+            x = np.arange(num_clients)
+            width = 0.25
+            
+            colors_mem = ['#1F3A93', '#E74C3C', '#2ECC71']
+            for i, (tier, sizes) in enumerate(zip(memory_tiers, memory_sizes)):
+                ax_mem.bar(x + i * width, sizes, width, label=tier, 
+                          color=colors_mem[i], alpha=0.8, edgecolor='#EAEAEA', linewidth=0.5)
+            
+            ax_mem.set_xlabel('Client ID', color='#EAEAEA', fontsize=11)
+            ax_mem.set_ylabel('Memory Size (samples)', color='#EAEAEA', fontsize=11)
+            ax_mem.set_title('3-Tier Memory Distribution per Client', color='#EAEAEA', fontweight='bold', fontsize=13)
+            ax_mem.set_xticks(x + width)
+            ax_mem.set_xticklabels([f'C{i+1}' for i in range(num_clients)])
+            ax_mem.tick_params(colors='#9CA3AF')
+            ax_mem.grid(True, alpha=0.2, color='#9CA3AF', axis='y')
+            ax_mem.spines['bottom'].set_color('#243B55')
+            ax_mem.spines['left'].set_color('#243B55')
+            ax_mem.spines['top'].set_visible(False)
+            ax_mem.spines['right'].set_visible(False)
+            ax_mem.legend(facecolor='#1E293B', edgecolor='#243B55', labelcolor='#EAEAEA')
+            
+            st.pyplot(fig_memory)
         
     except Exception as e:
         import traceback
