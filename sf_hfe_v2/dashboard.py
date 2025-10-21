@@ -170,7 +170,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Header
-st.markdown('<div class="main-header">🧠 SF-HFE Dashboard v2.0</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">SF-HFE Dashboard v2.0</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="subtitle">Scarcity Framework: Online Continual Learning with Zero Initial Data</div>',
     unsafe_allow_html=True
@@ -179,10 +179,10 @@ st.markdown(
 # Module badges
 st.markdown("""
 <div style='text-align: center; margin-bottom: 2rem;'>
-    <span class='module-badge'>🌐 Federated Learning</span>
-    <span class='module-badge'>🧠 Mixture of Experts</span>
-    <span class='module-badge'>🔗 P2P Gossip</span>
-    <span class='module-badge'>📊 Data Streaming</span>
+    <span class='module-badge'>Federated Learning</span>
+    <span class='module-badge'>Mixture of Experts</span>
+    <span class='module-badge'>P2P Gossip</span>
+    <span class='module-badge'>Data Streaming</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -190,7 +190,7 @@ st.markdown("---")
 
 # Sidebar Configuration
 with st.sidebar:
-    st.header("⚙️ Configuration")
+    st.header("Configuration")
     
     st.markdown("### System Parameters")
     
@@ -217,7 +217,7 @@ with st.sidebar:
     st.markdown("---")
     
     # Run Button
-    run_button = st.button("🚀 Start Training", type="primary", use_container_width=True)
+    run_button = st.button("Start Training", type="primary", use_container_width=True)
     
     st.markdown("---")
     st.caption("SF-HFE v2.0 | Production System")
@@ -226,18 +226,18 @@ with st.sidebar:
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.header("📊 Training Monitor")
+    st.header("Training Monitor")
     
     # System overview
-    with st.expander("ℹ️ System Overview", expanded=False):
+    with st.expander("System Overview", expanded=False):
         st.markdown(f"""
         **Architecture**: Online Continual Learning
         
         **Modules**:
-        - 🌐 **Federated Learning**: Server aggregates insights (NO raw data)
-        - 🧠 **MoE**: {num_clients} clients with 10 experts each
-        - 🔗 **P2P**: {'Enabled' if enable_p2p else 'Disabled'}
-        - 📊 **Streaming**: {'With drift' if enable_drift else 'Stationary'}
+        - Federated Learning: Server aggregates insights (NO raw data)
+        - MoE: {num_clients} clients with 10 experts each
+        - P2P: {'Enabled' if enable_p2p else 'Disabled'}
+        - Streaming: {'With drift' if enable_drift else 'Stationary'}
         
         **Experts per Client**:
         - Structure (3): Geometry, Temporal, Reconstruction
@@ -245,7 +245,7 @@ with col1:
         - Guardrail (2): Governance, Consistency
         - Specialized (3): Peer Selection, Meta-Adaptation, Memory
         
-        **Developer Status**: **ZERO training data** (learns from user insights only)
+        **Developer Status**: ZERO training data (learns from user insights only)
         """)
     
     # Output area
@@ -254,7 +254,7 @@ with col1:
     log_container = st.container()
     
 with col2:
-    st.header("📈 Metrics")
+    st.header("Metrics")
     
     metrics_container = st.container()
     chart_container = st.container()
@@ -284,7 +284,7 @@ if run_button:
         
         # Display info
         with log_container:
-            st.markdown("### 📝 Training Log")
+            st.markdown("### Training Log")
             st.code(f"""
 SF-HFE v2.0 Online Training
 ============================
@@ -365,54 +365,54 @@ $ python main.py
 else:
     # Welcome screen
     with log_container:
-        st.markdown("### 👋 Welcome to SF-HFE v2.0")
+        st.markdown("### Welcome to SF-HFE v2.0")
         
         st.info("""
         **Production-Grade Online Continual Learning System**
         
         This dashboard provides an interface to the SF-HFE framework:
         
-        🌐 **Federated Learning**: Developer learns with ZERO data  
-        🧠 **10 Specialized Experts**: Organized in 4 categories  
-        🔗 **P2P Gossip**: Decentralized knowledge sharing  
-        📊 **Data Streams**: Continuous learning with concept drift  
-        💾 **3-Tier Memory**: Anti-forgetting mechanisms  
+        - Federated Learning: Developer learns with ZERO data  
+        - 10 Specialized Experts: Organized in 4 categories  
+        - P2P Gossip: Decentralized knowledge sharing  
+        - Data Streams: Continuous learning with concept drift  
+        - 3-Tier Memory: Anti-forgetting mechanisms  
         """)
         
         st.markdown("---")
         
-        st.markdown("### 📚 Module Structure")
+        st.markdown("### Module Structure")
         
         col_m1, col_m2 = st.columns(2)
         
         with col_m1:
             st.markdown("""
-            **🌐 federated/**
-            - `server.py` - Central coordinator
-            - `global_memory.py` - Insight storage
-            - `meta_learning.py` - MAML engine
+            **federated/**
+            - server.py - Central coordinator
+            - global_memory.py - Insight storage
+            - meta_learning.py - MAML engine
             
-            **🧠 moe/**
-            - `client.py` - User device
-            - `router.py` - Expert selector
-            - `base_expert.py` - Expert base
+            **moe/**
+            - client.py - User device
+            - router.py - Expert selector
+            - base_expert.py - Expert base
             """)
         
         with col_m2:
             st.markdown("""
-            **👥 moe/experts/**
-            - `structure/` - 3 experts
-            - `intelligence/` - 2 experts
-            - `guardrail/` - 2 experts
-            - `specialized/` - 3 experts
+            **moe/experts/**
+            - structure/ - 3 experts
+            - intelligence/ - 2 experts
+            - guardrail/ - 2 experts
+            - specialized/ - 3 experts
             
-            **🔗 p2p/** & **📊 data/**
-            - `gossip.py` - P2P protocol
-            - `stream.py` - Data generation
+            **p2p/** & **data/**
+            - gossip.py - P2P protocol
+            - stream.py - Data generation
             """)
     
     with metrics_container:
-        st.markdown("### 🎯 System Capabilities")
+        st.markdown("### System Capabilities")
         
         st.metric("Total Experts", "10", help="Per client")
         st.metric("Expert Categories", "4", help="Structure/Intelligence/Guardrail/Specialized")
@@ -421,26 +421,26 @@ else:
         
         st.markdown("---")
         st.markdown("**Ready to Test**")
-        st.markdown("👈 Configure parameters and click **Start Training**")
+        st.markdown("Configure parameters in sidebar and click **Start Training**")
     
     with chart_container:
-        st.markdown("### 🏗️ Architecture")
+        st.markdown("### Architecture")
         
         st.markdown("""
         ```
         Developer (ZERO data)
-        ↓
+          |
         Server + Meta-Learner
-        ↓
+          |
         [Insights Only]
-        ↑
+          |
         5 Users with Data
-        ├── Client 1 (10 experts)
-        ├── Client 2 (10 experts)
-        ├── Client 3 (10 experts)
-        ├── Client 4 (10 experts)
-        └── Client 5 (10 experts)
-           ↕️ [P2P Gossip]
+          - Client 1 (10 experts)
+          - Client 2 (10 experts)
+          - Client 3 (10 experts)
+          - Client 4 (10 experts)
+          - Client 5 (10 experts)
+        [P2P Gossip between clients]
         ```
         """)
 
