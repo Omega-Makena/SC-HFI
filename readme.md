@@ -339,15 +339,33 @@ System learns structural patterns from unlabeled data in a completely decentrali
 
 ### Quick Start
 
+**Option 1: Using the launcher (Windows - Recommended):**
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+START_DASHBOARD.bat
+```
+This automatically creates a virtual environment and installs dependencies!
 
-# Launch web dashboard
+**Option 2: Manual setup:**
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate venv (Windows)
+venv\Scripts\activate
+
+# Activate venv (Linux/Mac)  
+source venv/bin/activate
+
+# Install core dependencies
+pip install torch numpy matplotlib streamlit pandas
+
+# Launch dashboard
 streamlit run dashboard.py
 ```
 
 The dashboard will open in your browser at `http://localhost:8501`
+
+> ⚠️ **Note**: We skip `pyarrow` installation as it requires C++ build tools. The dashboard works fine without it!
 
 ### Dashboard Features
 
