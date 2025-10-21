@@ -13,7 +13,7 @@ import numpy as np
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scarcity.core import Expert, Router, Client, Server, MetaLearner
+from scarcity.core import Expert, StructureExpert, DriftExpert, Router, Client, Server, MetaLearner
 
 
 def setup_logging(level=logging.INFO):
@@ -182,6 +182,123 @@ def run_insight_exchange(num_clients=5, num_rounds=5, input_dim=10, output_dim=1
     return server, clients, meta_learner
 
 
+def run_expert_routing(num_clients=5, num_rounds=5, input_dim=10, output_dim=1,
+                      router_strategy="variance"):
+    """
+    Run the Expert Routing system with specialized experts and adaptive routing.
+    
+    Each client has multiple experts (StructureExpert, DriftExpert), and a Router
+    selects the most appropriate expert based on data characteristics.
+    
+    Args:
+        num_clients: Number of federated learning clients
+        num_rounds: Number of global training rounds
+        input_dim: Input dimension for models
+        output_dim: Output dimension for models
+        router_strategy: Routing strategy ("variance", "random", "round_robin")
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 80)
+    logger.info("STAGE 4: Expert Routing Architecture")
+    logger.info("=" * 80)
+    
+    # Create meta-learner
+    logger.info("Creating MetaLearner for insight aggregation...")
+    meta_learner = MetaLearner()
+    
+    # Create clients with expert routing enabled
+    logger.info(f"Creating {num_clients} clients with Expert Routing (strategy={router_strategy})...")
+    clients = [
+        Client(client_id=i, input_dim=input_dim, output_dim=output_dim, 
+               data_size=100, use_experts=True, router_strategy=router_strategy) 
+        for i in range(num_clients)
+    ]
+    
+    # Create server with meta-learner
+    logger.info("Creating server with MetaLearner integration...")
+    server = Server(clients=clients, meta_learner=meta_learner, 
+                   input_dim=input_dim, output_dim=output_dim)
+    
+    logger.info("\n" + "=" * 80)
+    logger.info(f"Starting Expert Routing: {num_rounds} global rounds")
+    logger.info(f"Each client has: StructureExpert + DriftExpert")
+    logger.info(f"Router Strategy: {router_strategy}")
+    logger.info("=" * 80 + "\n")
+    
+    # Track expert usage statistics
+    expert_usage = {
+        "StructureExpert": 0,
+        "DriftExpert": 0
+    }
+    
+    # Run expert routing rounds
+    for round_num in range(1, num_rounds + 1):
+        logger.info(f"\n{'='*80}")
+        logger.info(f"EXPERT ROUTING ROUND {round_num}/{num_rounds}")
+        logger.info(f"{'='*80}")
+        
+        metrics = server.run_insight_round(round_num)
+        knowledge = metrics["aggregated_knowledge"]
+        
+        # Display expert selection for each client
+        logger.info("\n" + "-" * 80)
+        logger.info("Expert Selection Summary:")
+        logger.info("-" * 80)
+        
+        for client in clients:
+            if hasattr(client, 'selected_expert') and client.selected_expert:
+                expert_name = type(client.selected_expert).__name__
+                expert_usage[expert_name] += 1
+                
+                # Get the expert summaries from the insight
+                insights = [i for i in server.memory if i.get("client_id") == client.client_id]
+                if insights:
+                    last_insight = insights[-1]
+                    if "expert_summaries" in last_insight:
+                        summaries = last_insight["expert_summaries"]
+                        logger.info(
+                            f"  Client {client.client_id}: {expert_name} | "
+                            f"Loss: {last_insight['final_loss']:.4f}"
+                        )
+                        for summary in summaries:
+                            if summary["expert_type"] == "StructureExpert":
+                                logger.info(
+                                    f"     -> Structure: mean={summary['mean']:.4f}, "
+                                    f"std={summary['std']:.4f}, var={summary['variance']:.4f}"
+                                )
+                            elif summary["expert_type"] == "DriftExpert":
+                                logger.info(
+                                    f"     -> Drift: current={summary['current_mean']:.4f}, "
+                                    f"drift={summary['drift']:.4f}"
+                                )
+        
+        logger.info("-" * 80)
+        
+        logger.info(
+            f"\nRound {round_num} Summary:\n"
+            f"  StructureExpert used: {sum(1 for c in clients if hasattr(c, 'selected_expert') and type(c.selected_expert).__name__ == 'StructureExpert')} times\n"
+            f"  DriftExpert used: {sum(1 for c in clients if hasattr(c, 'selected_expert') and type(c.selected_expert).__name__ == 'DriftExpert')} times\n"
+            f"  Total Insights: {len(server.memory)}"
+        )
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("Expert Routing Complete!")
+    logger.info("=" * 80)
+    
+    # Final statistics
+    logger.info("\n" + "Final Expert Usage Statistics:")
+    total_selections = sum(expert_usage.values())
+    for expert_name, count in expert_usage.items():
+        percentage = (count / total_selections * 100) if total_selections > 0 else 0
+        logger.info(f"  {expert_name}: {count} times ({percentage:.1f}%)")
+    
+    logger.info(f"\n  Total Insights Stored: {len(server.memory)}")
+    logger.info(f"  MetaLearner History Size: {len(meta_learner.insight_history)}")
+    
+    return server, clients, meta_learner
+
+
 def main():
     """
     Main execution function for the Scarcity Framework.
@@ -199,7 +316,7 @@ def main():
     OUTPUT_DIM = 1
     
     # Choose which mode to run
-    MODE = "insight_exchange"  # Options: "federated_learning" or "insight_exchange"
+    MODE = "expert_routing"  # Options: "federated_learning", "insight_exchange", or "expert_routing"
     
     if MODE == "federated_learning":
         logger.info("\nRunning in FEDERATED LEARNING mode (Stage 2)")
@@ -218,6 +335,16 @@ def main():
             num_rounds=NUM_ROUNDS,
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM
+        )
+    elif MODE == "expert_routing":
+        logger.info("\nRunning in EXPERT ROUTING mode (Stage 4)")
+        logger.info("=" * 80)
+        server, clients, meta_learner = run_expert_routing(
+            num_clients=NUM_CLIENTS,
+            num_rounds=NUM_ROUNDS,
+            input_dim=INPUT_DIM,
+            output_dim=OUTPUT_DIM,
+            router_strategy="variance"  # Options: "variance", "random", "round_robin"
         )
     
     logger.info("\n" + "=" * 80)

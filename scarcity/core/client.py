@@ -11,6 +11,8 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from copy import deepcopy
+from .expert import StructureExpert, DriftExpert
+from .router import Router
 
 
 class Client:
@@ -22,7 +24,8 @@ class Client:
     """
     
     def __init__(self, client_id: int, input_dim: int = 10, output_dim: int = 1, 
-                 data_size: int = 100, **kwargs):
+                 data_size: int = 100, use_experts: bool = False, 
+                 router_strategy: str = "variance", **kwargs):
         """
         Initialize the Client.
         
@@ -31,6 +34,8 @@ class Client:
             input_dim: Input dimension for the model
             output_dim: Output dimension for the model
             data_size: Number of local data samples
+            use_experts: If True, use expert routing architecture
+            router_strategy: Strategy for expert selection ("variance", "random", "round_robin")
             **kwargs: Additional configuration parameters
         """
         self.client_id = client_id
@@ -41,6 +46,20 @@ class Client:
         self.model = nn.Linear(input_dim, output_dim)
         self.input_dim = input_dim
         self.output_dim = output_dim
+        self.use_experts = use_experts
+        
+        # Initialize experts and router if enabled
+        if use_experts:
+            self.experts = [
+                StructureExpert(expert_id=0, input_dim=input_dim, output_dim=output_dim),
+                DriftExpert(expert_id=1, input_dim=input_dim, output_dim=output_dim)
+            ]
+            self.router = Router(experts=self.experts, strategy=router_strategy)
+            self.logger.info(f"Client {client_id}: Initialized with {len(self.experts)} experts and Router (strategy={router_strategy})")
+            self.selected_expert = None  # Track which expert was used
+        else:
+            self.experts = None
+            self.router = None
         
         # Generate synthetic local data (non-IID by adding client-specific bias)
         np.random.seed(client_id * 42)  # Different seed per client
@@ -104,61 +123,103 @@ class Client:
         """
         self.logger.info(f"Client {self.client_id}: Generating insight through local training")
         
-        criterion = nn.MSELoss()
-        optimizer = optim.SGD(self.model.parameters(), lr=lr)
-        
-        # Track gradients and losses
-        gradient_norms = []
-        losses = []
-        
-        for epoch in range(epochs):
-            # Forward pass
-            outputs = self.model(self.X_train)
-            loss = criterion(outputs, self.y_train)
-            losses.append(loss.item())
+        # If using experts, route and train with selected expert
+        if self.use_experts and self.router:
+            # Router selects expert based on data characteristics
+            selected_expert = self.router.select_expert(self.X_train)
+            self.selected_expert = selected_expert  # Track for logging
             
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
+            self.logger.info(
+                f"Client {self.client_id}: Router selected {type(selected_expert).__name__}"
+            )
             
-            # Collect gradient information
-            grad_norm = 0.0
-            for param in self.model.parameters():
-                if param.grad is not None:
-                    grad_norm += param.grad.norm().item() ** 2
-            grad_norm = grad_norm ** 0.5
-            gradient_norms.append(grad_norm)
+            # Train with selected expert
+            metrics = selected_expert.train(self.X_train, self.y_train, epochs=epochs, lr=lr)
             
-            optimizer.step()
+            # Collect summaries from all experts
+            expert_summaries = []
+            for expert in self.experts:
+                summary = expert.summarize(self.X_train)
+                expert_summaries.append(summary)
+            
+            # Create insight with expert information
+            insight = {
+                "client_id": self.client_id,
+                "selected_expert": type(selected_expert).__name__,
+                "selected_expert_id": selected_expert.expert_id,
+                "loss_improvement": float(metrics["initial_loss"] - metrics["final_loss"]),
+                "final_loss": float(metrics["final_loss"]),
+                "num_samples": len(self.X_train),
+                "epochs_trained": epochs,
+                "expert_summaries": expert_summaries,
+                "num_experts": len(self.experts)
+            }
+            
+            self.logger.info(
+                f"Client {self.client_id}: Generated expert insight - "
+                f"expert={type(selected_expert).__name__}, "
+                f"loss: {metrics['initial_loss']:.4f} -> {metrics['final_loss']:.4f}"
+            )
+            
+            return insight
         
-        # Calculate insight metrics
-        mean_grad = np.mean(gradient_norms)
-        std_grad = np.std(gradient_norms)
-        loss_improvement = losses[0] - losses[-1]
-        final_loss = losses[-1]
-        
-        # Uncertainty score: based on gradient variance and loss stability
-        # Higher uncertainty = more volatile training
-        uncertainty_score = std_grad / (mean_grad + 1e-8) + abs(np.std(losses))
-        
-        insight = {
-            "client_id": self.client_id,
-            "mean_grad": float(mean_grad),
-            "std_grad": float(std_grad),
-            "uncertainty": float(uncertainty_score),
-            "loss_improvement": float(loss_improvement),
-            "final_loss": float(final_loss),
-            "num_samples": len(self.X_train),
-            "epochs_trained": epochs
-        }
-        
-        self.logger.info(
-            f"Client {self.client_id}: Generated insight - "
-            f"mean_grad={mean_grad:.4f}, uncertainty={uncertainty_score:.4f}, "
-            f"loss: {losses[0]:.4f} -> {final_loss:.4f}"
-        )
-        
-        return insight
+        else:
+            # Original non-expert mode
+            criterion = nn.MSELoss()
+            optimizer = optim.SGD(self.model.parameters(), lr=lr)
+            
+            # Track gradients and losses
+            gradient_norms = []
+            losses = []
+            
+            for epoch in range(epochs):
+                # Forward pass
+                outputs = self.model(self.X_train)
+                loss = criterion(outputs, self.y_train)
+                losses.append(loss.item())
+                
+                # Backward pass
+                optimizer.zero_grad()
+                loss.backward()
+                
+                # Collect gradient information
+                grad_norm = 0.0
+                for param in self.model.parameters():
+                    if param.grad is not None:
+                        grad_norm += param.grad.norm().item() ** 2
+                grad_norm = grad_norm ** 0.5
+                gradient_norms.append(grad_norm)
+                
+                optimizer.step()
+            
+            # Calculate insight metrics
+            mean_grad = np.mean(gradient_norms)
+            std_grad = np.std(gradient_norms)
+            loss_improvement = losses[0] - losses[-1]
+            final_loss = losses[-1]
+            
+            # Uncertainty score: based on gradient variance and loss stability
+            # Higher uncertainty = more volatile training
+            uncertainty_score = std_grad / (mean_grad + 1e-8) + abs(np.std(losses))
+            
+            insight = {
+                "client_id": self.client_id,
+                "mean_grad": float(mean_grad),
+                "std_grad": float(std_grad),
+                "uncertainty": float(uncertainty_score),
+                "loss_improvement": float(loss_improvement),
+                "final_loss": float(final_loss),
+                "num_samples": len(self.X_train),
+                "epochs_trained": epochs
+            }
+            
+            self.logger.info(
+                f"Client {self.client_id}: Generated insight - "
+                f"mean_grad={mean_grad:.4f}, uncertainty={uncertainty_score:.4f}, "
+                f"loss: {losses[0]:.4f} -> {final_loss:.4f}"
+            )
+            
+            return insight
     
     def evaluate(self):
         """

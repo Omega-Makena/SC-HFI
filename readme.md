@@ -52,6 +52,33 @@ Transformed FL into knowledge-sharing system:
 - ✓ Key Innovation: Share knowledge, not data or raw weights
 - ✓ Successfully tested with 5 clients × 5 rounds = 25 insights collected
 
+## Stage 4 - Expert Routing Architecture ✓
+
+Implemented hierarchical expert system with adaptive routing:
+- ✓ **Router.select_expert(data)** - Intelligent expert selection
+  - Variance-based strategy: High variance → StructureExpert, Low variance → DriftExpert
+  - Supports multiple strategies: "variance", "random", "round_robin"
+  - Analyzes data characteristics to route to appropriate expert
+- ✓ **StructureExpert** - Specializes in data structure analysis
+  - Computes mean, std, variance, min, max statistics
+  - Optimized for high-variance, structured data patterns
+  - Trains dedicated PyTorch Linear model
+- ✓ **DriftExpert** - Specializes in drift detection
+  - Tracks temporal changes: absolute difference from previous batch
+  - Detects concept drift and distribution shifts
+  - Maintains previous_mean for drift calculation
+- ✓ **Client with Multiple Experts** - Each client holds 2+ experts
+  - Router dynamically selects best expert per training round
+  - generate_insight() aggregates summaries from all experts
+  - Tracks which expert was selected for transparency
+- ✓ **Expert Usage Statistics** - Full visibility into routing decisions
+  - Displays which expert each client used per round
+  - Aggregates usage stats: StructureExpert 100% (all high-variance data)
+  - Expert summaries included in insights
+
+**Test Results:**  
+5 clients × 5 rounds = 25 expert selections. StructureExpert selected 100% of time due to high data variance.
+
 ## Components
 
 ### Expert
@@ -93,8 +120,8 @@ meta_learner = MetaLearner()
 - [x] Stage 0: Project skeleton and empty class definitions
 - [x] Stage 2: Federated Learning implementation (FedAvg with 5 clients, 5 rounds)
 - [x] Stage 3: Scarcity-style Insight Exchange (knowledge sharing without raw weights)
-- [ ] Stage 4: Expert ensemble and Router integration
-- [ ] Stage 5: Advanced meta-learning and optimization
+- [x] Stage 4: Expert Routing Architecture (StructureExpert + DriftExpert with adaptive Router)
+- [ ] Stage 5: Advanced meta-learning and hierarchical optimization
 
 ## Requirements
 

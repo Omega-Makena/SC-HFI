@@ -205,10 +205,22 @@ class Server:
         for client in selected_clients:
             insight = client.generate_insight(epochs=5)
             insights.append(insight)
-            self.logger.info(
-                f"Server: Received insight from Client {client.client_id} - "
-                f"uncertainty={insight['uncertainty']:.4f}"
-            )
+            
+            # Log differently based on whether experts are used
+            if 'selected_expert' in insight:
+                self.logger.info(
+                    f"Server: Received insight from Client {client.client_id} - "
+                    f"expert={insight['selected_expert']}, loss={insight['final_loss']:.4f}"
+                )
+            elif 'uncertainty' in insight:
+                self.logger.info(
+                    f"Server: Received insight from Client {client.client_id} - "
+                    f"uncertainty={insight['uncertainty']:.4f}"
+                )
+            else:
+                self.logger.info(
+                    f"Server: Received insight from Client {client.client_id}"
+                )
         
         # 4. Store insights in memory
         self.memory.extend(insights)
