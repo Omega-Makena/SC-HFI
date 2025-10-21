@@ -333,15 +333,67 @@ System learns structural patterns from unlabeled data in a completely decentrali
 - [x] Stage 8: Self-Supervised Structure Discovery (autoencoder-style learning, no labels, no centralized data)
 - [ ] Future: Advanced hierarchical optimization and real-world applications
 
+## Web Dashboard 🎨
+
+**NEW:** Interactive Streamlit dashboard for easy testing!
+
+### Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Launch web dashboard
+streamlit run dashboard.py
+```
+
+The dashboard will open in your browser at `http://localhost:8501`
+
+### Dashboard Features
+
+- ✅ **Stage Selector** - Choose from all 8 implemented stages
+- ✅ **Parameter Controls** - Interactive sliders for hyperparameters
+  - Number of clients (2-20)
+  - Number of rounds (1-10)
+  - Input/output dimensions
+  - Data size per client
+  - Learning rate, epochs
+  - Router strategy
+- ✅ **Real-time Logs** - View execution output in terminal-style display
+- ✅ **Metrics Visualization** - Live charts and metrics
+  - Reconstruction loss evolution
+  - Replay error tracking
+  - Client statistics
+  - Meta-learning updates
+- ✅ **Beautiful UI** - Modern, responsive design
+
+### Screenshots
+
+The dashboard provides:
+- **Left Panel**: Execution logs and progress
+- **Right Panel**: Key metrics and visualizations
+- **Sidebar**: Configuration controls
+
+## Command Line Usage
+
+Alternatively, you can run stages directly:
+
+```bash
+# Run via Python script (edit MODE in scarcity/run.py)
+python scarcity/run.py
+```
+
 ## Requirements
 
 - Python 3.8+
 - See `requirements.txt` for dependencies
+- **New**: Streamlit >=1.28.0 for web dashboard
 
 ## Logging
 
 Logs are written to:
 - Console (stdout)
 - File: `logs/scarcity.log`
+- Dashboard: Real-time in web interface
 
 Log format: `YYYY-MM-DD HH:MM:SS - module.class - LEVEL - message`
