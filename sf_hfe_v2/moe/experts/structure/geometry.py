@@ -56,18 +56,9 @@ class GeometryExpert(BaseExpert):
         # Standard prediction loss
         pred_loss = nn.functional.mse_loss(outputs, targets)
         
-        # Geometric structure loss (preserve distances)
-        if self.pca_components is not None:
-            # Project to PCA space and back
-            with torch.no_grad():
-                centered = outputs - self.pca_mean
-                projected = torch.matmul(centered, self.pca_components.T)
-                reconstructed = torch.matmul(projected, self.pca_components) + self.pca_mean
-            
-            # Reconstruction loss encourages learning the manifold
-            geom_loss = nn.functional.mse_loss(outputs, reconstructed.detach())
-            
-            return pred_loss + 0.1 * geom_loss
+        # Note: Geometric structure preservation would require access to input features
+        # For now, just use standard loss
+        # Full implementation would use PCA on inputs, not outputs
         
         return pred_loss
     

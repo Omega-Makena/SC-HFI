@@ -356,9 +356,11 @@ $ python main.py
             st.pyplot(fig)
         
     except Exception as e:
+        import traceback
         status_placeholder.error(f"❌ Error: {str(e)}")
         with log_container:
-            st.code(f"Error: {str(e)}\n\nStack trace:\n{import traceback; traceback.format_exc()}", language="python")
+            error_trace = traceback.format_exc()
+            st.code(f"Error: {str(e)}\n\nStack trace:\n{error_trace}", language="python")
 
 else:
     # Welcome screen

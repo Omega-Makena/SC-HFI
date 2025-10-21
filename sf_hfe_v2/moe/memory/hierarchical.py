@@ -128,12 +128,26 @@ class CompressedMemory:
         n = min(n, len(self.memory))
         samples = random.sample(self.memory, n)
         
+        # Check if we have mixed dimensions (compressed vs raw)
+        # This can happen during initial training before compression is trained
+        sample_dims = [s[0].shape for s in samples]
+        if len(set([tuple(d) for d in sample_dims])) > 1:
+            # Mixed dimensions - only use samples with consistent size
+            # Use the most common dimension
+            from collections import Counter
+            dim_counts = Counter([tuple(d) for d in sample_dims])
+            target_dim = dim_counts.most_common(1)[0][0]
+            samples = [s for s in samples if tuple(s[0].shape) == target_dim]
+            
+            if len(samples) == 0:
+                return None, None
+        
         latents = torch.stack([s[0] for s in samples])
         ys = torch.stack([s[1] for s in samples])
         
         # Decode latents back to input space
         with torch.no_grad():
-            if self.compression_trained:
+            if self.compression_trained and latents.shape[1] == self.latent_dim:
                 xs = self.decoder(latents)
             else:
                 xs = latents  # Raw samples if not compressed yet
