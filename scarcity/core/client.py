@@ -1,0 +1,154 @@
+"""
+Client Module
+
+The Client class represents a participant in the federated learning process.
+Each client holds local data and can train models locally.
+"""
+
+import logging
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+from copy import deepcopy
+
+
+class Client:
+    """
+    A federated learning client in the Scarcity Framework.
+    
+    Each client represents a data owner or edge device that participates
+    in the federated learning process without sharing raw data.
+    """
+    
+    def __init__(self, client_id: int, input_dim: int = 10, output_dim: int = 1, 
+                 data_size: int = 100, **kwargs):
+        """
+        Initialize the Client.
+        
+        Args:
+            client_id: Unique identifier for this client
+            input_dim: Input dimension for the model
+            output_dim: Output dimension for the model
+            data_size: Number of local data samples
+            **kwargs: Additional configuration parameters
+        """
+        self.client_id = client_id
+        self.logger = logging.getLogger(f"{__name__}.Client{client_id}")
+        self.logger.info(f"Initializing Client {client_id}")
+        
+        # Create local model (simple linear model)
+        self.model = nn.Linear(input_dim, output_dim)
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        
+        # Generate synthetic local data (non-IID by adding client-specific bias)
+        np.random.seed(client_id * 42)  # Different seed per client
+        self.X_train = torch.randn(data_size, input_dim)
+        # Add client-specific bias to create non-IID data
+        self.X_train += torch.randn(1, input_dim) * 0.5 * client_id
+        
+        # Generate labels with some noise
+        true_weights = torch.randn(input_dim, output_dim)
+        self.y_train = self.X_train @ true_weights + torch.randn(data_size, output_dim) * 0.1
+        
+        self.logger.info(f"Client {client_id} created with {data_size} local samples")
+        
+    def local_train(self, epochs: int = 5, lr: float = 0.01):
+        """
+        Train the model locally on client data.
+        
+        Args:
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Local model weights
+        """
+        self.logger.info(f"Client {self.client_id}: Starting local training for {epochs} epochs")
+        
+        criterion = nn.MSELoss()
+        optimizer = optim.SGD(self.model.parameters(), lr=lr)
+        
+        initial_loss = None
+        for epoch in range(epochs):
+            # Forward pass
+            outputs = self.model(self.X_train)
+            loss = criterion(outputs, self.y_train)
+            
+            if epoch == 0:
+                initial_loss = loss.item()
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        final_loss = loss.item()
+        self.logger.info(f"Client {self.client_id}: Trained locally - Loss: {initial_loss:.4f} -> {final_loss:.4f}")
+        
+        return self.get_weights()
+    
+    def evaluate(self):
+        """
+        Evaluate the model on local data.
+        
+        Returns:
+            Evaluation metrics (loss)
+        """
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model(self.X_train)
+            criterion = nn.MSELoss()
+            loss = criterion(outputs, self.y_train)
+        
+        self.logger.info(f"Client {self.client_id}: Evaluation loss = {loss.item():.4f}")
+        return {"loss": loss.item()}
+    
+    def get_data_summary(self):
+        """
+        Get a summary of the local data distribution.
+        
+        Returns:
+            Summary statistics about local data
+        """
+        summary = {
+            "num_samples": len(self.X_train),
+            "input_dim": self.input_dim,
+            "output_dim": self.output_dim,
+            "data_mean": self.X_train.mean().item(),
+            "data_std": self.X_train.std().item()
+        }
+        self.logger.info(f"Client {self.client_id}: Data summary - {summary}")
+        return summary
+    
+    def receive_global_model(self, model_weights):
+        """
+        Receive and apply global model weights from the server.
+        
+        Args:
+            model_weights: Weights from the global model (state_dict)
+        """
+        self.model.load_state_dict(deepcopy(model_weights))
+        self.logger.info(f"Client {self.client_id}: Received and loaded global model weights")
+    
+    def get_weights(self):
+        """
+        Get current model weights.
+        
+        Returns:
+            Model state_dict
+        """
+        return deepcopy(self.model.state_dict())
+    
+    def send_update(self):
+        """
+        Send local model updates to the server.
+        
+        Returns:
+            Model updates to send to server
+        """
+        weights = self.get_weights()
+        self.logger.info(f"Client {self.client_id}: Sending model update to server")
+        return weights
+
