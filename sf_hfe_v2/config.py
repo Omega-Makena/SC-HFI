@@ -8,9 +8,13 @@ Online Continual Learning System with Zero Initial Data
 # ============================================================================
 
 SYSTEM_CONFIG = {
-    "version": "1.0.0",
+    "version": "2.0.0",
     "mode": "online_continual",
     "developer_has_data": False,  # Critical: Developer starts with ZERO data
+    
+    # REPRODUCIBILITY (P0 - Critical for research)
+    "random_seed": 42,
+    "deterministic": True,  # Enable deterministic mode
 }
 
 # ============================================================================
@@ -245,6 +249,33 @@ MONITORING_CONFIG = {
     "checkpoint_frequency": 1000,    # Every 1000 samples
     "checkpoint_dir": "./checkpoints",
     "keep_n_checkpoints": 5,
+}
+
+# ============================================================================
+# EVALUATION CONFIGURATION (P1 - Essential for Research)
+# ============================================================================
+
+EVALUATION_CONFIG = {
+    # Test split
+    "test_split": 0.2,               # 20% for testing
+    "eval_frequency": 50,            # Evaluate every N batches
+    
+    # Fairness metrics (P1 - Critical)
+    "compute_fairness": True,
+    "fairness_metrics": [
+        "hfi",                       # Healthcare Fairness Index
+        "worst_case_ratio",          # Max/Avg performance
+        "coefficient_variation",     # Relative dispersion
+        "min_max_range",             # Performance range
+    ],
+    
+    # Per-client evaluation
+    "per_client_metrics": True,
+    "track_client_variance": True,
+    
+    # Baseline comparison
+    "compare_to_fedavg": True,       # Run FedAvg baseline
+    "baseline_rounds": 10,           # FedAvg rounds for comparison
 }
 
 # ============================================================================
