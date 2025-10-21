@@ -325,4 +325,77 @@ class MetaLearner:
         
         self.logger.info(f"MetaLearner: Summary - {summary}")
         return summary
+    
+    def compute_structural_priors(self, structural_insights: list):
+        """
+        Compute aggregated structural priors from self-supervised insights.
+        
+        This extracts common structural patterns discovered across all clients
+        without requiring labels - pure structure discovery.
+        
+        Args:
+            structural_insights: List of structural insight dicts from clients
+            
+        Returns:
+            Dictionary of structural priors
+        """
+        self.logger.info(f"MetaLearner: Computing structural priors from {len(structural_insights)} clients")
+        
+        if not structural_insights:
+            self.logger.warning("MetaLearner: No structural insights to process")
+            return {}
+        
+        # Aggregate reconstruction losses from all experts
+        reconstruction_losses = []
+        replay_errors = []
+        drift_scores = []
+        lr_adjustments = []
+        
+        for insight in structural_insights:
+            if "expert_results" in insight:
+                results = insight["expert_results"]
+                
+                # Collect StructureExpert reconstruction losses
+                if "StructureExpert" in results:
+                    metrics = results["StructureExpert"]["metrics"]
+                    if "avg_reconstruction_loss" in metrics:
+                        reconstruction_losses.append(metrics["avg_reconstruction_loss"])
+                
+                # Collect MemoryConsolidationExpert replay errors
+                if "MemoryConsolidationExpert" in results:
+                    metrics = results["MemoryConsolidationExpert"]["metrics"]
+                    if "avg_replay_error" in metrics:
+                        replay_errors.append(metrics["avg_replay_error"])
+                
+                # Collect DriftExpert drift scores
+                if "DriftExpert" in results:
+                    metrics = results["DriftExpert"]["metrics"]
+                    if "drift_score" in metrics:
+                        drift_scores.append(metrics["drift_score"])
+                
+                # Collect MetaAdaptationExpert LR adjustments
+                if "MetaAdaptationExpert" in results:
+                    metrics = results["MetaAdaptationExpert"]["metrics"]
+                    if "lr_adjustments" in metrics:
+                        lr_adjustments.append(metrics["lr_adjustments"])
+        
+        # Compute structural priors
+        structural_priors = {
+            "avg_reconstruction_loss": float(np.mean(reconstruction_losses)) if reconstruction_losses else 0.0,
+            "std_reconstruction_loss": float(np.std(reconstruction_losses)) if len(reconstruction_losses) > 1 else 0.0,
+            "avg_replay_error": float(np.mean(replay_errors)) if replay_errors else 0.0,
+            "avg_drift_score": float(np.mean(drift_scores)) if drift_scores else 0.0,
+            "avg_lr_adjustments": float(np.mean(lr_adjustments)) if lr_adjustments else 0.0,
+            "num_clients": len(structural_insights),
+            "discovery_mode": "self_supervised"
+        }
+        
+        self.logger.info(
+            f"MetaLearner: Structural priors computed - "
+            f"Avg reconstruction: {structural_priors['avg_reconstruction_loss']:.4f}, "
+            f"Avg replay error: {structural_priors['avg_replay_error']:.4f}, "
+            f"Avg drift: {structural_priors['avg_drift_score']:.4f}"
+        )
+        
+        return structural_priors
 

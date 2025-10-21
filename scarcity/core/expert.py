@@ -32,6 +32,23 @@ class Expert:
         self.logger = logging.getLogger(f"{__name__}.Expert{expert_id}")
         self.logger.info(f"Initializing Expert {expert_id}")
         
+    def train_self_supervised(self, X_data, epochs: int = 5, lr: float = 0.01):
+        """
+        Self-supervised training using autoencoder-style reconstruction.
+        
+        Base implementation - subclasses can override for specialized objectives.
+        
+        Args:
+            X_data: Unlabeled data (no labels needed)
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Dictionary with training metrics
+        """
+        self.logger.info(f"Expert {self.expert_id}: Self-supervised training not implemented")
+        return {"reconstruction_loss": 0.0}
+        
     def train(self, data):
         """
         Train the expert on provided data.
@@ -113,7 +130,12 @@ class StructureExpert(Expert):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.model = nn.Linear(input_dim, output_dim)
-        self.logger.info(f"StructureExpert {expert_id} initialized with model")
+        
+        # Autoencoder for self-supervised learning
+        self.encoder = nn.Linear(input_dim, input_dim // 2)
+        self.decoder = nn.Linear(input_dim // 2, input_dim)
+        
+        self.logger.info(f"StructureExpert {expert_id} initialized with model and autoencoder")
         
     def train(self, X_train, y_train, epochs: int = 5, lr: float = 0.01):
         """
@@ -175,6 +197,53 @@ class StructureExpert(Expert):
         )
         
         return summary
+    
+    def train_self_supervised(self, X_data, epochs: int = 5, lr: float = 0.01):
+        """
+        Self-supervised structure discovery using autoencoder reconstruction.
+        
+        Args:
+            X_data: Unlabeled data
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Training metrics with reconstruction loss
+        """
+        criterion = nn.MSELoss()
+        optimizer = optim.Adam(
+            list(self.encoder.parameters()) + list(self.decoder.parameters()),
+            lr=lr
+        )
+        
+        reconstruction_losses = []
+        
+        for epoch in range(epochs):
+            # Encode
+            encoded = self.encoder(X_data)
+            # Decode
+            reconstructed = self.decoder(encoded)
+            
+            # Reconstruction loss
+            loss = criterion(reconstructed, X_data)
+            reconstruction_losses.append(loss.item())
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        avg_recon_loss = np.mean(reconstruction_losses)
+        
+        self.logger.info(
+            f"StructureExpert {self.expert_id}: Structure discovery - "
+            f"reconstruction loss: {reconstruction_losses[0]:.4f} -> {reconstruction_losses[-1]:.4f}"
+        )
+        
+        return {
+            "initial_reconstruction_loss": reconstruction_losses[0],
+            "final_reconstruction_loss": reconstruction_losses[-1],
+            "avg_reconstruction_loss": avg_recon_loss
+        }
 
 
 class DriftExpert(Expert):
@@ -200,6 +269,7 @@ class DriftExpert(Expert):
         self.output_dim = output_dim
         self.model = nn.Linear(input_dim, output_dim)
         self.previous_mean = None
+        self.previous_data = None  # For drift detection in self-supervised mode
         self.logger.info(f"DriftExpert {expert_id} initialized with model")
         
     def train(self, X_train, y_train, epochs: int = 5, lr: float = 0.01):
@@ -272,6 +342,44 @@ class DriftExpert(Expert):
         )
         
         return summary
+    
+    def train_self_supervised(self, X_data, epochs: int = 5, lr: float = 0.01):
+        """
+        Self-supervised drift detection through temporal consistency.
+        
+        Args:
+            X_data: Unlabeled data
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Training metrics with drift statistics
+        """
+        # Compute drift from previous batch
+        if isinstance(X_data, torch.Tensor):
+            current_stats = X_data.mean().item()
+        else:
+            current_stats = float(np.mean(X_data))
+        
+        drift_score = 0.0
+        if self.previous_data is not None:
+            if isinstance(self.previous_data, torch.Tensor):
+                prev_stats = self.previous_data.mean().item()
+            else:
+                prev_stats = float(np.mean(self.previous_data))
+            drift_score = abs(current_stats - prev_stats)
+        
+        self.previous_data = X_data.clone() if isinstance(X_data, torch.Tensor) else X_data.copy()
+        
+        self.logger.info(
+            f"DriftExpert {self.expert_id}: Structure discovery - "
+            f"drift score: {drift_score:.4f}"
+        )
+        
+        return {
+            "drift_score": drift_score,
+            "current_mean": current_stats
+        }
 
 
 class MemoryConsolidationExpert(Expert):
@@ -398,6 +506,64 @@ class MemoryConsolidationExpert(Expert):
         )
         
         return summary
+    
+    def train_self_supervised(self, X_data, epochs: int = 5, lr: float = 0.01):
+        """
+        Self-supervised training with memory consolidation.
+        
+        Args:
+            X_data: Unlabeled data
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Training metrics with memory replay statistics
+        """
+        # Train model with autoencoder-style objective
+        criterion = nn.MSELoss()
+        optimizer = optim.SGD(self.model.parameters(), lr=lr)
+        
+        replay_errors = []
+        
+        for epoch in range(epochs):
+            # Create self-supervised target (identity mapping or reconstruction)
+            outputs = self.model(X_data)
+            # Use input as target for autoencoder-style learning
+            targets = X_data.mean(dim=1, keepdim=True).expand_as(outputs)
+            loss = criterion(outputs, targets)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            # Store and replay latent vectors
+            with torch.no_grad():
+                latent = self.model(X_data[:10])
+                self.memory_buffer.append(latent.detach().clone())
+                
+                if len(self.memory_buffer) > self.memory_size:
+                    self.memory_buffer.pop(0)
+                
+                # Compute replay error
+                if len(self.memory_buffer) > 1:
+                    replay_idx = np.random.randint(0, len(self.memory_buffer) - 1)
+                    replay_latent = self.memory_buffer[replay_idx]
+                    current_latent = self.model(X_data[:10])
+                    replay_error = torch.mean((current_latent - replay_latent) ** 2).item()
+                    replay_errors.append(replay_error)
+        
+        avg_replay_error = np.mean(replay_errors) if replay_errors else 0.0
+        
+        self.logger.info(
+            f"MemoryExpert {self.expert_id}: Replayed embeddings - "
+            f"avg replay error: {avg_replay_error:.4f}, memory: {len(self.memory_buffer)}/{self.memory_size}"
+        )
+        
+        return {
+            "avg_replay_error": avg_replay_error,
+            "memory_size": len(self.memory_buffer),
+            "memory_utilization": len(self.memory_buffer) / self.memory_size
+        }
 
 
 class MetaAdaptationExpert(Expert):
@@ -513,4 +679,64 @@ class MetaAdaptationExpert(Expert):
         )
         
         return summary
+    
+    def train_self_supervised(self, X_data, epochs: int = 5, lr: float = 0.01):
+        """
+        Self-supervised training with adaptive LR based on reconstruction quality.
+        
+        Args:
+            X_data: Unlabeled data
+            epochs: Number of training epochs  
+            lr: Initial learning rate
+            
+        Returns:
+            Training metrics with LR adjustment statistics
+        """
+        self.current_lr = lr
+        criterion = nn.MSELoss()
+        optimizer = optim.SGD(self.model.parameters(), lr=self.current_lr)
+        
+        reconstruction_losses = []
+        lr_adjustments = 0
+        
+        for epoch in range(epochs):
+            # Self-supervised: predict mean of input
+            outputs = self.model(X_data)
+            targets = X_data.mean(dim=1, keepdim=True).expand_as(outputs)
+            loss = criterion(outputs, targets)
+            reconstruction_losses.append(loss.item())
+            
+            # Adaptive LR based on loss trend
+            if epoch > 0:
+                loss_change = reconstruction_losses[-1] - reconstruction_losses[-2]
+                
+                if loss_change > 0:  # Loss increased
+                    self.current_lr *= 0.9
+                    lr_adjustments += 1
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = self.current_lr
+                elif loss_change < -0.05:  # Loss decreased significantly
+                    self.current_lr *= 1.05
+                    lr_adjustments += 1
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = self.current_lr
+            
+            self.lr_history.append(self.current_lr)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        self.logger.info(
+            f"MetaAdaptation {self.expert_id}: Adjusted learning rate {lr_adjustments} times - "
+            f"final_lr={self.current_lr:.6f}"
+        )
+        
+        return {
+            "initial_reconstruction_loss": reconstruction_losses[0],
+            "final_reconstruction_loss": reconstruction_losses[-1],
+            "initial_lr": lr,
+            "final_lr": self.current_lr,
+            "lr_adjustments": lr_adjustments
+        }
 

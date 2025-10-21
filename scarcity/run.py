@@ -666,6 +666,131 @@ def run_p2p_gossip(num_clients=5, num_rounds=5, input_dim=10, output_dim=1):
     return server, clients, meta_learner
 
 
+def run_structure_discovery(num_clients=5, num_rounds=5, input_dim=10):
+    """
+    Stage 8: Self-supervised structure discovery bootstrap.
+    
+    All experts train with self-supervised objectives (autoencoder-style)
+    on unlabeled data. No labels, no centralized data - pure structure learning.
+    
+    Args:
+        num_clients: Number of federated learning clients
+        num_rounds: Number of discovery rounds
+        input_dim: Input dimension for data
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 80)
+    logger.info("STAGE 8: Self-Supervised Structure Discovery")
+    logger.info("=" * 80)
+    
+    # Create meta-learner
+    logger.info("Creating MetaLearner for structural prior computation...")
+    meta_learner = MetaLearner()
+    
+    # Create clients with expert routing (unlabeled data only!)
+    logger.info(f"Creating {num_clients} clients with unlabeled data...")
+    clients = [
+        Client(client_id=i, input_dim=input_dim, output_dim=1, 
+               data_size=100, use_experts=True, router_strategy="variance") 
+        for i in range(num_clients)
+    ]
+    
+    logger.info("\n" + "=" * 80)
+    logger.info(f"Starting Structure Discovery: {num_rounds} continuous rounds")
+    logger.info("Mode: SELF-SUPERVISED (No labels, no centralized data)")
+    logger.info(f"Each client has 4 experts with self-supervised objectives")
+    logger.info("=" * 80 + "\n")
+    
+    # Track structural priors evolution
+    prior_history = []
+    all_structural_insights = []
+    
+    # Run continuous structure discovery
+    for round_num in range(1, num_rounds + 1):
+        logger.info(f"\n{'='*80}")
+        logger.info(f"STRUCTURE DISCOVERY ROUND {round_num}/{num_rounds}")
+        logger.info(f"{'='*80}")
+        
+        # Phase 1: Each client performs structure discovery
+        logger.info("\n--- Client Structure Discovery Phase ---")
+        structural_insights = []
+        
+        for client in clients:
+            # Self-supervised training (NO LABELS!)
+            insight = client.structure_discovery(epochs=5, lr=0.01)
+            
+            if insight:
+                structural_insights.append(insight)
+                all_structural_insights.append(insight)
+                
+                logger.info(f"  Client {client.client_id}: Completed structure discovery")
+                
+                # Log expert-specific messages
+                results = insight.get("expert_results", {})
+                if "MemoryConsolidationExpert" in results:
+                    mem_metrics = results["MemoryConsolidationExpert"]["metrics"]
+                    logger.info(
+                        f"    -> MemoryExpert replayed embeddings: "
+                        f"error={mem_metrics.get('avg_replay_error', 0):.4f}"
+                    )
+                
+                if "MetaAdaptationExpert" in results:
+                    meta_metrics = results["MetaAdaptationExpert"]["metrics"]
+                    logger.info(
+                        f"    -> MetaAdaptation adjusted learning rate: "
+                        f"{meta_metrics.get('lr_adjustments', 0)} times, "
+                        f"final_lr={meta_metrics.get('final_lr', 0.01):.6f}"
+                    )
+        
+        # Phase 2: Server computes structural priors
+        logger.info("\n--- Server Structural Prior Computation ---")
+        
+        if structural_insights:
+            structural_priors = meta_learner.compute_structural_priors(structural_insights)
+            prior_history.append(structural_priors.copy())
+            
+            logger.info(f"  Server: Updated structural priors from {len(structural_insights)} clients")
+            logger.info(f"    Avg Reconstruction Loss: {structural_priors['avg_reconstruction_loss']:.4f}")
+            logger.info(f"    Avg Replay Error: {structural_priors['avg_replay_error']:.4f}")
+            logger.info(f"    Avg Drift Score: {structural_priors['avg_drift_score']:.4f}")
+            logger.info(f"    Avg LR Adjustments: {structural_priors['avg_lr_adjustments']:.2f}")
+        
+        logger.info(
+            f"\nRound {round_num} Summary:\n"
+            f"  Clients Completed Discovery: {len(structural_insights)}\n"
+            f"  Total Structural Insights: {len(all_structural_insights)}\n"
+            f"  Mode: Self-Supervised (No Labels)"
+        )
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("Structure Discovery Complete!")
+    logger.info("=" * 80)
+    
+    # Display prior evolution
+    logger.info("\nStructural Prior Evolution Across Rounds:")
+    for i, priors in enumerate(prior_history, 1):
+        logger.info(
+            f"  Round {i}: recon_loss={priors['avg_reconstruction_loss']:.4f}, "
+            f"replay_error={priors['avg_replay_error']:.4f}, "
+            f"drift={priors['avg_drift_score']:.4f}"
+        )
+    
+    # Final summary
+    logger.info("\nFinal Structural Priors:")
+    if prior_history:
+        final_priors = prior_history[-1]
+        logger.info(f"  Reconstruction Loss: {final_priors['avg_reconstruction_loss']:.4f}")
+        logger.info(f"  Replay Error: {final_priors['avg_replay_error']:.4f}")
+        logger.info(f"  Drift Score: {final_priors['avg_drift_score']:.4f}")
+        logger.info(f"  LR Adjustments: {final_priors['avg_lr_adjustments']:.2f}")
+        logger.info(f"  Total Insights Collected: {len(all_structural_insights)}")
+    
+    logger.info("\nKey Achievement: Learned structure without labels or centralized data!")
+    
+    return clients, meta_learner, all_structural_insights
+
+
 def main():
     """
     Main execution function for the Scarcity Framework.
@@ -683,7 +808,7 @@ def main():
     OUTPUT_DIM = 1
     
     # Choose which mode to run
-    MODE = "p2p_gossip"  # Options: "stage1", "federated_learning", "insight_exchange", "expert_routing", "meta_learning", or "p2p_gossip"
+    MODE = "structure_discovery"  # Options: "stage1", "federated_learning", "insight_exchange", "expert_routing", "meta_learning", "p2p_gossip", or "structure_discovery"
     
     if MODE == "stage1":
         logger.info("\nRunning in STAGE 1 mode - Simple Training & Insights")
@@ -737,6 +862,15 @@ def main():
             num_rounds=NUM_ROUNDS,
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM
+        )
+    
+    elif MODE == "structure_discovery":
+        logger.info("\nRunning in STRUCTURE DISCOVERY mode (Stage 8)")
+        logger.info("=" * 80)
+        clients, meta_learner, insights = run_structure_discovery(
+            num_clients=NUM_CLIENTS,
+            num_rounds=NUM_ROUNDS,
+            input_dim=INPUT_DIM
         )
     
     logger.info("\n" + "=" * 80)

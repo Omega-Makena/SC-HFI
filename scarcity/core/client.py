@@ -305,6 +305,54 @@ class Client:
             f"updates={meta_params.get('meta_updates', 0)}"
         )
     
+    def structure_discovery(self, epochs: int = 5, lr: float = 0.01):
+        """
+        Perform structure discovery using self-supervised learning.
+        
+        All experts train on unlabeled data with self-supervised objectives
+        (autoencoder reconstruction, temporal consistency, etc.)
+        
+        Args:
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Dictionary with structural insights from all experts
+        """
+        if not self.use_experts or not self.experts:
+            self.logger.warning(f"Client {self.client_id}: No experts for structure discovery")
+            return None
+        
+        self.logger.info(f"Client {self.client_id}: Starting structure discovery (self-supervised)")
+        
+        # Train all experts with self-supervised objectives
+        expert_results = {}
+        
+        for expert in self.experts:
+            expert_name = type(expert).__name__
+            
+            # Self-supervised training (no labels!)
+            metrics = expert.train_self_supervised(self.X_train, epochs=epochs, lr=lr)
+            summary = expert.summarize(self.X_train)
+            
+            expert_results[expert_name] = {
+                "metrics": metrics,
+                "summary": summary
+            }
+        
+        # Create structural insight
+        structural_insight = {
+            "client_id": self.client_id,
+            "num_experts": len(self.experts),
+            "expert_results": expert_results,
+            "data_shape": list(self.X_train.shape),
+            "mode": "self_supervised"
+        }
+        
+        self.logger.info(f"Client {self.client_id}: Completed structure discovery with {len(self.experts)} experts")
+        
+        return structural_insight
+    
     def get_expert_weights(self, expert_idx: int):
         """
         Get weights from a specific expert.
