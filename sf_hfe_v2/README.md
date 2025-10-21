@@ -6,64 +6,72 @@ Clean, modular architecture for building General AI with ZERO initial data.
 
 ---
 
-## 📁 **Organized Structure** (Easy to Navigate!)
+## Organized Structure (Easy to Navigate)
 
 ```
 sf_hfe_v2/
-│
-├── 📄 config.py                           # Central configuration
-├── 🚀 main.py                             # Main orchestrator
-├── 📖 README.md                           # This file
-├── 📊 STRUCTURE.md                        # Detailed organization docs
-│
-├── 🌐 federated/                          # FEDERATED LEARNING
-│   ├── server.py                          # Server coordinator
-│   ├── global_memory.py                   # Insight storage
-│   ├── meta_learning.py                   # Online MAML engine
-│   └── __init__.py
-│
-├── 🧠 moe/                                # MIXTURE OF EXPERTS
-│   ├── client.py                          # User device
-│   ├── router.py                          # Expert selector
-│   ├── base_expert.py                     # Expert base class
-│   ├── __init__.py
-│   │
-│   ├── 💾 memory/                         # 3-Tier Memory
-│   │   ├── hierarchical.py                # Main interface
-│   │   └── __init__.py
-│   │
-│   └── 👥 experts/                        # 10 Experts (Organized!)
-│       ├── __init__.py
-│       │
-│       ├── 🏗️ structure/                  # Core Structure (3)
-│       │   ├── geometry.py                # PCA manifolds
-│       │   ├── temporal.py                # LSTM sequences
-│       │   ├── reconstruction.py          # VAE reconstruction
-│       │   └── __init__.py
-│       │
-│       ├── 🧠 intelligence/               # Intelligence (2)
-│       │   ├── causal.py                  # DAG discovery
-│       │   ├── drift.py                   # KL divergence
-│       │   └── __init__.py
-│       │
-│       ├── 🛡️ guardrail/                  # Guardrails (2)
-│       │   ├── governance.py              # Constraints
-│       │   ├── consistency.py             # Outlier detection
-│       │   └── __init__.py
-│       │
-│       └── ⚙️ specialized/                # Specialized (3)
-│           ├── peer_selection.py          # P2P topology
-│           ├── meta_adaptation.py         # LR scheduling
-│           ├── memory_consolidation.py    # Replay orchestration
-│           └── __init__.py
-│
-├── 🔗 p2p/                                # P2P GOSSIP
-│   ├── gossip.py                          # Gossip protocol
-│   └── __init__.py
-│
-└── 📊 data/                               # DATA STREAMING
-    ├── stream.py                          # Concept drift generator
-    └── __init__.py
+  
+  config.py                           - Central configuration
+  main.py                             - Main orchestrator
+  README.md                           - This file
+  STRUCTURE.md                        - Detailed organization docs
+  
+  federated/                          - FEDERATED LEARNING
+    server.py                         - Server coordinator
+    global_memory.py                  - Insight storage
+    meta_learning.py                  - Online MAML engine
+    __init__.py
+  
+  moe/                                - MIXTURE OF EXPERTS
+    client.py                         - User device
+    router.py                         - Expert selector
+    base_expert.py                    - Expert base class
+    __init__.py
+    
+    memory/                           - 3-Tier Memory
+      hierarchical.py                 - Main interface
+      __init__.py
+    
+    experts/                          - 10 Experts (Organized)
+      __init__.py
+      
+      structure/                      - Core Structure (3)
+        geometry.py                   - PCA manifolds
+        temporal.py                   - LSTM sequences
+        reconstruction.py             - VAE reconstruction
+        __init__.py
+      
+      intelligence/                   - Intelligence (2)
+        causal.py                     - DAG discovery
+        drift.py                      - KL divergence
+        __init__.py
+      
+      guardrail/                      - Guardrails (2)
+        governance.py                 - Constraints
+        consistency.py                - Outlier detection
+        __init__.py
+      
+      specialized/                    - Specialized (3)
+        peer_selection.py             - P2P topology
+        meta_adaptation.py            - LR scheduling
+        memory_consolidation.py       - Replay orchestration
+        __init__.py
+  
+  p2p/                                - P2P GOSSIP
+    gossip.py                         - Gossip protocol
+    __init__.py
+  
+  data/                               - DATA STREAMING
+    stream.py                         - Concept drift generator
+    __init__.py
+  
+  baselines/                          - BASELINE IMPLEMENTATIONS
+    fedavg.py                         - Standard FedAvg
+    __init__.py
+  
+  evaluation/                         - EVALUATION & FAIRNESS
+    metrics.py                        - HFI and per-client metrics
+    __init__.py
 ```
 
 ---
