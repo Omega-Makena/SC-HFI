@@ -230,9 +230,20 @@ class Server:
         if self.meta_learner:
             aggregated_knowledge = self.meta_learner.aggregate(insights)
             self.logger.info(f"Server: MetaLearner aggregated knowledge from {len(insights)} clients")
+            
+            # Meta-learning: Update global parameters based on insights
+            updated_params = self.meta_learner.update_global_params(insights)
+            self.logger.info(f"Server: MetaLearner updated global params")
+            
+            # Broadcast meta-parameters to clients
+            meta_params = self.meta_learner.broadcast_params()
+            for client in selected_clients:
+                client.receive_meta_params(meta_params)
+            
+            self.logger.info(f"Server: Broadcasted meta-parameters to {len(selected_clients)} clients")
         else:
             self.logger.warning("Server: No MetaLearner available, skipping aggregation")
-            aggregated_knowledge = {"avg_uncertainty": np.mean([i["uncertainty"] for i in insights])}
+            aggregated_knowledge = {"avg_uncertainty": np.mean([i.get("uncertainty", 0) for i in insights])}
         
         # 6. Evaluate global model
         metrics = self.evaluate_global_model()

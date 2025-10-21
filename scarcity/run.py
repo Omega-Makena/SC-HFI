@@ -428,6 +428,107 @@ def run_expert_routing(num_clients=5, num_rounds=5, input_dim=10, output_dim=1,
     return server, clients, meta_learner
 
 
+def run_meta_learning(num_clients=5, num_rounds=5, input_dim=10, output_dim=1):
+    """
+    Stage 5: Reptile-style meta-learning with adaptive global parameters.
+    
+    The MetaLearner tracks statistics across rounds and provides better
+    initialization parameters to clients, inspired by Reptile meta-learning.
+    
+    Args:
+        num_clients: Number of federated learning clients
+        num_rounds: Number of global training rounds
+        input_dim: Input dimension for models
+        output_dim: Output dimension for models
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 80)
+    logger.info("STAGE 5: Reptile-Style Meta-Learning")
+    logger.info("=" * 80)
+    
+    # Create meta-learner
+    logger.info("Creating MetaLearner with Reptile-style approach...")
+    meta_learner = MetaLearner()
+    
+    # Create clients with expert routing enabled
+    logger.info(f"Creating {num_clients} clients with Expert Routing...")
+    clients = [
+        Client(client_id=i, input_dim=input_dim, output_dim=output_dim, 
+               data_size=100, use_experts=True, router_strategy="variance") 
+        for i in range(num_clients)
+    ]
+    
+    # Create server with meta-learner
+    logger.info("Creating server with MetaLearner integration...")
+    server = Server(clients=clients, meta_learner=meta_learner, 
+                   input_dim=input_dim, output_dim=output_dim)
+    
+    logger.info("\n" + "=" * 80)
+    logger.info(f"Starting Meta-Learning: {num_rounds} global rounds")
+    logger.info("Meta-Learner will adapt global parameters across rounds")
+    logger.info("=" * 80 + "\n")
+    
+    # Track meta-parameter evolution
+    meta_param_history = []
+    
+    # Run meta-learning rounds
+    for round_num in range(1, num_rounds + 1):
+        logger.info(f"\n{'='*80}")
+        logger.info(f"META-LEARNING ROUND {round_num}/{num_rounds}")
+        logger.info(f"{'='*80}")
+        
+        # Display current meta-parameters
+        current_meta_params = meta_learner.broadcast_params()
+        meta_param_history.append(current_meta_params.copy())
+        
+        logger.info(
+            f"\nCurrent Meta-Parameters (Round {round_num}):\n"
+            f"  Meta-Mean: {current_meta_params['meta_mean']:.4f}\n"
+            f"  Meta-Std: {current_meta_params['meta_std']:.4f}\n"
+            f"  Meta-LR: {current_meta_params['meta_lr']:.4f}\n"
+            f"  Updates: {current_meta_params['meta_updates']}"
+        )
+        
+        # Run insight exchange round (with meta-learning)
+        metrics = server.run_insight_round(round_num)
+        knowledge = metrics["aggregated_knowledge"]
+        
+        logger.info(
+            f"\nRound {round_num} Summary:\n"
+            f"  Global Loss: {metrics['avg_loss']:.4f}\n"
+            f"  Insights Collected: {metrics['num_insights']}\n"
+            f"  Meta-Parameters Updated: Yes"
+        )
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("Meta-Learning Complete!")
+    logger.info("=" * 80)
+    
+    # Display meta-parameter evolution
+    logger.info("\nMeta-Parameter Evolution Across Rounds:")
+    for i, params in enumerate(meta_param_history, 1):
+        logger.info(
+            f"  Round {i}: mean={params['meta_mean']:.4f}, "
+            f"std={params['meta_std']:.4f}, "
+            f"lr={params['meta_lr']:.4f}"
+        )
+    
+    # Final meta-learner summary
+    logger.info("\nFinal Meta-Learner Summary:")
+    summary = meta_learner.summarize()
+    logger.info(f"  Total Insights Processed: {summary['total_insights']}")
+    logger.info(f"  Meta-Updates: {summary['global_params']['num_updates']}")
+    logger.info(f"  Final Meta-Mean: {summary['global_params']['mean']:.4f}")
+    logger.info(f"  Final Meta-Std: {summary['global_params']['std']:.4f}")
+    logger.info(f"  Final Meta-LR: {summary['global_params']['learning_rate']:.4f}")
+    
+    if 'avg_historical_loss' in summary:
+        logger.info(f"  Avg Historical Loss: {summary['avg_historical_loss']:.4f}")
+    
+    return server, clients, meta_learner
+
+
 def main():
     """
     Main execution function for the Scarcity Framework.
@@ -445,7 +546,7 @@ def main():
     OUTPUT_DIM = 1
     
     # Choose which mode to run
-    MODE = "stage1"  # Options: "stage1", "federated_learning", "insight_exchange", or "expert_routing"
+    MODE = "meta_learning"  # Options: "stage1", "federated_learning", "insight_exchange", "expert_routing", or "meta_learning"
     
     if MODE == "stage1":
         logger.info("\nRunning in STAGE 1 mode - Simple Training & Insights")
@@ -479,6 +580,16 @@ def main():
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,
             router_strategy="variance"  # Options: "variance", "random", "round_robin"
+        )
+    
+    elif MODE == "meta_learning":
+        logger.info("\nRunning in META-LEARNING mode (Stage 5)")
+        logger.info("=" * 80)
+        server, clients, meta_learner = run_meta_learning(
+            num_clients=NUM_CLIENTS,
+            num_rounds=NUM_ROUNDS,
+            input_dim=INPUT_DIM,
+            output_dim=OUTPUT_DIM
         )
     
     logger.info("\n" + "=" * 80)

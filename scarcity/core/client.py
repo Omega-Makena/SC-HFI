@@ -283,4 +283,23 @@ class Client:
         weights = self.get_weights()
         self.logger.info(f"Client {self.client_id}: Sending model update to server")
         return weights
+    
+    def receive_meta_params(self, meta_params: dict):
+        """
+        Receive meta-learning parameters from the server.
+        
+        These parameters can be used to improve initialization and training.
+        
+        Args:
+            meta_params: Dictionary of meta-learning parameters
+        """
+        self.meta_params = meta_params
+        
+        self.logger.info(
+            f"Client {self.client_id}: Received meta-parameters - "
+            f"mean={meta_params.get('meta_mean', 0):.4f}, "
+            f"std={meta_params.get('meta_std', 1):.4f}, "
+            f"lr={meta_params.get('meta_lr', 0.01):.4f}, "
+            f"updates={meta_params.get('meta_updates', 0)}"
+        )
 
