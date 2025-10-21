@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from copy import deepcopy
-from .expert import StructureExpert, DriftExpert
+from .expert import StructureExpert, DriftExpert, MemoryConsolidationExpert, MetaAdaptationExpert
 from .router import Router
 
 
@@ -52,7 +52,9 @@ class Client:
         if use_experts:
             self.experts = [
                 StructureExpert(expert_id=0, input_dim=input_dim, output_dim=output_dim),
-                DriftExpert(expert_id=1, input_dim=input_dim, output_dim=output_dim)
+                DriftExpert(expert_id=1, input_dim=input_dim, output_dim=output_dim),
+                MemoryConsolidationExpert(expert_id=2, input_dim=input_dim, output_dim=output_dim, memory_size=50),
+                MetaAdaptationExpert(expert_id=3, input_dim=input_dim, output_dim=output_dim)
             ]
             self.router = Router(experts=self.experts, strategy=router_strategy)
             self.logger.info(f"Client {client_id}: Initialized with {len(self.experts)} experts and Router (strategy={router_strategy})")

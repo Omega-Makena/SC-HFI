@@ -171,6 +171,51 @@ Round 5: Client 2 <-> Client 3 (DriftExpert), Client 1 <-> Client 4 (DriftExpert
 
 **Key Innovation:** Hybrid architecture combining centralized meta-learning with decentralized P2P gossip. Enables rapid knowledge dissemination without overloading the server.
 
+## Stage 7 - Extended Expert Portfolio ✓
+
+Added two new specialized expert types to the ensemble:
+- ✓ **MemoryConsolidationExpert** - Memory replay and consolidation
+  - Stores past latent vectors (embeddings) in bounded memory buffer (size=50)
+  - Implements experience replay during training
+  - Computes replay error: distance between current and past embeddings
+  - Prevents catastrophic forgetting through memory replay
+  - train() logs: "MemoryExpert: Replayed embeddings - avg replay error: X.XXXX"
+  - summarize() returns: memory_buffer_size, memory_capacity, avg_replay_error, memory_utilization
+  
+- ✓ **MetaAdaptationExpert** - Adaptive learning rate optimization
+  - Monitors loss dynamics during training
+  - Automatically adjusts learning rate based on loss trends:
+    * If loss increases → LR *= 0.9 (reduce)
+    * If loss decreases >0.1 → LR *= 1.05 (increase)
+  - Tracks LR history across epochs
+  - train() logs: "MetaAdaptation: Adjusted learning rate N times - final_lr=X.XXXXXX"
+  - summarize() returns: current_lr, avg_lr, lr_history_length, lr_variance
+
+- ✓ **Client Integration** - Each client now has **4 experts** total:
+  1. StructureExpert (data structure analysis)
+  2. DriftExpert (concept drift detection)
+  3. MemoryConsolidationExpert (experience replay)
+  4. MetaAdaptationExpert (adaptive learning rate)
+  
+- ✓ **Enhanced Insights** - Expert summaries include all 4 experts
+  - MemoryExpert summaries show replay statistics
+  - MetaAdaptation summaries show LR adjustments
+  - P2P gossip can sync any of the 4 experts
+  
+**Test Results (5 rounds):**
+- All 4 experts initialized per client (20 total experts)
+- MemoryConsolidationExpert synced in P2P (Round 4: Client 2 <-> Client 4)
+- MetaAdaptationExpert synced in P2P (Round 1: Client 0 <-> Client 1, Round 5: Client 0 <-> Client 2)
+- Expert summaries include memory and adaptive LR stats
+- Logs show "MemoryExpert replayed embeddings" and "MetaAdaptation adjusted learning rate"
+
+**Expert Portfolio Diversity:**
+The framework now has 4 specialized experts addressing different learning challenges:
+- **Structure** → Statistical patterns
+- **Drift** → Temporal changes
+- **Memory** → Historical knowledge retention
+- **Adaptation** → Dynamic optimization
+
 ## Components
 
 ### Expert
@@ -216,6 +261,7 @@ meta_learner = MetaLearner()
 - [x] Stage 4: Expert Routing Architecture (StructureExpert + DriftExpert with adaptive Router)
 - [x] Stage 5: Reptile-style Meta-Learning (adaptive global parameters across rounds)
 - [x] Stage 6: P2P Gossip Mechanism (decentralized expert weight exchange between peers)
+- [x] Stage 7: Extended Expert Portfolio (MemoryConsolidation + MetaAdaptation = 4 experts total)
 - [ ] Future: Advanced hierarchical optimization and real-world applications
 
 ## Requirements

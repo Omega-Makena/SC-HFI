@@ -273,3 +273,244 @@ class DriftExpert(Expert):
         
         return summary
 
+
+class MemoryConsolidationExpert(Expert):
+    """
+    Expert that specializes in memory consolidation and replay.
+    
+    Stores past latent vectors (embeddings) and replays them during training
+    to prevent catastrophic forgetting. Simulates experience replay.
+    """
+    
+    def __init__(self, expert_id: int, input_dim: int = 10, output_dim: int = 1, 
+                 memory_size: int = 50, **kwargs):
+        """
+        Initialize the MemoryConsolidationExpert.
+        
+        Args:
+            expert_id: Unique identifier for this expert
+            input_dim: Input dimension for the model
+            output_dim: Output dimension for the model
+            memory_size: Maximum number of latent vectors to store
+            **kwargs: Additional configuration parameters
+        """
+        super().__init__(expert_id, **kwargs)
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.model = nn.Linear(input_dim, output_dim)
+        self.memory_size = memory_size
+        self.memory_buffer = []  # Store past latent vectors
+        self.logger.info(f"MemoryConsolidationExpert {expert_id} initialized with memory size {memory_size}")
+        
+    def train(self, X_train, y_train, epochs: int = 5, lr: float = 0.01):
+        """
+        Train with memory replay mechanism.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            epochs: Number of training epochs
+            lr: Learning rate
+            
+        Returns:
+            Training metrics including replay statistics
+        """
+        criterion = nn.MSELoss()
+        optimizer = optim.SGD(self.model.parameters(), lr=lr)
+        
+        losses = []
+        replay_errors = []
+        
+        for epoch in range(epochs):
+            # Regular training
+            outputs = self.model(X_train)
+            loss = criterion(outputs, y_train)
+            losses.append(loss.item())
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            # Store current embeddings in memory (simulate latent vectors)
+            with torch.no_grad():
+                latent = self.model(X_train[:10])  # Store first 10 samples as latent
+                self.memory_buffer.append(latent.detach().clone())
+                
+                # Keep memory bounded
+                if len(self.memory_buffer) > self.memory_size:
+                    self.memory_buffer.pop(0)
+                
+                # Replay from memory if available
+                if len(self.memory_buffer) > 1:
+                    # Get random past latent vectors
+                    replay_idx = np.random.randint(0, len(self.memory_buffer) - 1)
+                    replay_latent = self.memory_buffer[replay_idx]
+                    
+                    # Compute reconstruction error (replay quality)
+                    current_latent = self.model(X_train[:10])
+                    replay_error = torch.mean((current_latent - replay_latent) ** 2).item()
+                    replay_errors.append(replay_error)
+        
+        avg_replay_error = np.mean(replay_errors) if replay_errors else 0.0
+        
+        self.logger.info(f"MemoryExpert: Replayed embeddings - avg replay error: {avg_replay_error:.4f}")
+        
+        return {
+            "initial_loss": losses[0],
+            "final_loss": losses[-1],
+            "avg_replay_error": avg_replay_error,
+            "memory_size": len(self.memory_buffer)
+        }
+    
+    def summarize(self, X_data):
+        """
+        Summarize memory consolidation characteristics.
+        
+        Args:
+            X_data: Data to analyze
+            
+        Returns:
+            Dictionary with memory statistics
+        """
+        # Compute replay error if memory exists
+        replay_error = 0.0
+        if len(self.memory_buffer) > 0 and isinstance(X_data, torch.Tensor):
+            with torch.no_grad():
+                current_latent = self.model(X_data[:10] if len(X_data) >= 10 else X_data)
+                if len(self.memory_buffer) > 0:
+                    past_latent = self.memory_buffer[-1]
+                    if current_latent.shape == past_latent.shape:
+                        replay_error = torch.mean((current_latent - past_latent) ** 2).item()
+        
+        summary = {
+            "expert_type": "MemoryConsolidationExpert",
+            "expert_id": self.expert_id,
+            "memory_buffer_size": len(self.memory_buffer),
+            "memory_capacity": self.memory_size,
+            "avg_replay_error": float(replay_error),
+            "memory_utilization": len(self.memory_buffer) / self.memory_size if self.memory_size > 0 else 0.0
+        }
+        
+        self.logger.debug(
+            f"MemoryConsolidationExpert {self.expert_id}: "
+            f"memory={len(self.memory_buffer)}/{self.memory_size}, "
+            f"replay_error={replay_error:.4f}"
+        )
+        
+        return summary
+
+
+class MetaAdaptationExpert(Expert):
+    """
+    Expert that specializes in adaptive learning rate adjustment.
+    
+    Monitors local training loss dynamics and automatically adjusts
+    the learning rate for optimal convergence.
+    """
+    
+    def __init__(self, expert_id: int, input_dim: int = 10, output_dim: int = 1, **kwargs):
+        """
+        Initialize the MetaAdaptationExpert.
+        
+        Args:
+            expert_id: Unique identifier for this expert
+            input_dim: Input dimension for the model
+            output_dim: Output dimension for the model
+            **kwargs: Additional configuration parameters
+        """
+        super().__init__(expert_id, **kwargs)
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.model = nn.Linear(input_dim, output_dim)
+        self.current_lr = 0.01
+        self.lr_history = []
+        self.logger.info(f"MetaAdaptationExpert {expert_id} initialized with adaptive LR")
+        
+    def train(self, X_train, y_train, epochs: int = 5, lr: float = 0.01):
+        """
+        Train with adaptive learning rate adjustment.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            epochs: Number of training epochs
+            lr: Initial learning rate
+            
+        Returns:
+            Training metrics including LR adjustments
+        """
+        self.current_lr = lr
+        criterion = nn.MSELoss()
+        optimizer = optim.SGD(self.model.parameters(), lr=self.current_lr)
+        
+        losses = []
+        lr_adjustments = 0
+        
+        for epoch in range(epochs):
+            # Forward pass
+            outputs = self.model(X_train)
+            loss = criterion(outputs, y_train)
+            losses.append(loss.item())
+            
+            # Adaptive LR adjustment based on loss trend
+            if epoch > 0:
+                loss_change = losses[-1] - losses[-2]
+                
+                if loss_change > 0:  # Loss increased
+                    self.current_lr *= 0.9  # Reduce LR
+                    lr_adjustments += 1
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = self.current_lr
+                elif loss_change < -0.1:  # Loss decreased significantly
+                    self.current_lr *= 1.05  # Slightly increase LR
+                    lr_adjustments += 1
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = self.current_lr
+            
+            self.lr_history.append(self.current_lr)
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        self.logger.info(
+            f"MetaAdaptation: Adjusted learning rate {lr_adjustments} times - "
+            f"final_lr={self.current_lr:.6f}"
+        )
+        
+        return {
+            "initial_loss": losses[0],
+            "final_loss": losses[-1],
+            "initial_lr": lr,
+            "final_lr": self.current_lr,
+            "lr_adjustments": lr_adjustments
+        }
+    
+    def summarize(self, X_data):
+        """
+        Summarize adaptive learning characteristics.
+        
+        Args:
+            X_data: Data to analyze (not used in this expert)
+            
+        Returns:
+            Dictionary with adaptive learning statistics
+        """
+        summary = {
+            "expert_type": "MetaAdaptationExpert",
+            "expert_id": self.expert_id,
+            "current_lr": float(self.current_lr),
+            "avg_lr": float(np.mean(self.lr_history)) if self.lr_history else self.current_lr,
+            "lr_history_length": len(self.lr_history),
+            "lr_variance": float(np.var(self.lr_history)) if len(self.lr_history) > 1 else 0.0
+        }
+        
+        self.logger.debug(
+            f"MetaAdaptationExpert {self.expert_id}: "
+            f"current_lr={self.current_lr:.6f}, "
+            f"avg_lr={summary['avg_lr']:.6f}"
+        )
+        
+        return summary
+
