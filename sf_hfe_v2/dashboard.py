@@ -14,9 +14,14 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from mpl_toolkits.mplot3d import Axes3D
+import pandas as pd
+import tempfile
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import SF-HFE modules
+from data.validation import DataValidator, DataEntryProcessor
 
 # Configure page
 st.set_page_config(
@@ -191,9 +196,16 @@ st.markdown("""
 
 st.markdown("---")
 
-# Sidebar Configuration
-with st.sidebar:
-    st.header("Configuration")
+# Navigation Tabs
+tab1, tab2 = st.tabs(["Training Dashboard", "Data Entry & Validation"])
+
+# ============================================================================
+# TAB 1: TRAINING DASHBOARD
+# ============================================================================
+with tab1:
+    # Sidebar Configuration
+    with st.sidebar:
+        st.header("Configuration")
     
     st.markdown("### System Parameters")
     
