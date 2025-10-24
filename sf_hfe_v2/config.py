@@ -15,6 +15,11 @@ SYSTEM_CONFIG = {
     # REPRODUCIBILITY (P0 - Critical for research)
     "random_seed": 42,
     "deterministic": True,  # Enable deterministic mode
+    
+    # Logging configuration
+    "log_level": "INFO",
+    "log_format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "log_file": "logs/federated_learning.log",
 }
 
 # ============================================================================
@@ -139,6 +144,7 @@ FL_CONFIG = {
     "communication_rounds": 10000,   # Essentially continuous
     "clients_per_round": "all",      # All available clients
     "insight_frequency": 50,         # Generate insights every N batches
+    "max_insights": 10000,          # Bounded memory storage
     
     # Insight generation (NOT raw data/weights)
     "insight_types": [
@@ -157,6 +163,10 @@ FL_CONFIG = {
     # Privacy
     "differential_privacy": False,   # Can add later
     "secure_aggregation": False,     # Can add later
+    
+    # Rate limiting
+    "max_requests_per_minute": 100,
+    "request_timeout": 30,
 }
 
 # ============================================================================

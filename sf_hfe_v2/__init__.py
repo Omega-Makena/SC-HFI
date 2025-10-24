@@ -3,17 +3,16 @@ SF-HFE v2.0: Scarcity Framework - Hybrid Federated Expertise
 Production-Grade Online Continual Learning System
 
 Organized Structure:
-- federated/   → Server-side (Developer with ZERO data)
+- federated/   → Server-side (Developer with ZERO data) + P2P gossip protocol
 - moe/         → Client-side (Users with data)
-- p2p/         → Decentralized communication
 - data/        → Data streaming
 """
 
 __version__ = "2.0.0"
 __author__ = "SF-HFE Team"
 
-# Federated Learning components
-from .federated import SFHFEServer, GlobalMemory, OnlineMAMLEngine
+# Federated Learning components (including P2P gossip)
+from .federated import SFHFEServer, GlobalMemory, OnlineMAMLEngine, P2PGossipManager
 
 # MoE components
 from .moe import (
@@ -44,8 +43,7 @@ from .moe.experts import (
     MemoryConsolidationExpert,
 )
 
-# P2P
-from .p2p import P2PGossipManager
+# P2P (now part of federated learning)
 
 # Data
 from .data import ConceptDriftStream, MultiClientStreamGenerator
@@ -80,7 +78,7 @@ __all__ = [
     'MetaAdaptationExpert',
     'MemoryConsolidationExpert',
     
-    # P2P
+    # P2P (integrated with federated learning)
     'P2PGossipManager',
     
     # Data
