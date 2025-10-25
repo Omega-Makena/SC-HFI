@@ -1,427 +1,487 @@
 """
-SF-HFE Client
-User device with 10 experts + router (MoE architecture)
-Performs online continual learning on local data stream
+SF-HFE Client - MoE Component
+Client-side implementation with domain awareness and P2P gossip capability
 """
 
-import torch
-import torch.nn as nn
-from typing import Dict, List, Tuple, Optional
-import numpy as np
 import logging
+from typing import Dict, List, Any, Optional, Tuple
+import numpy as np
+import time
+import threading
+from collections import defaultdict
 
-from config import (
-    EXPERT_CONFIG, MEMORY_CONFIG, STREAM_CONFIG,
-    LEARNING_CONFIG, P2P_CONFIG, MONITORING_CONFIG
+from .base_expert import BaseExpert
+from .structural_experts import (
+SchemaMapperExpert, TypeFormatExpert, MissingnessNoiseExpert, ScalingEncodingExpert
 )
-from router import ContextualBanditRouter
-from experts import (
-    GeometryExpert, TemporalExpert, ReconstructionExpert,
-    CausalInferenceExpert, DriftDetectionExpert,
-    GovernanceExpert, StatisticalConsistencyExpert,
-    PeerSelectionExpert, MetaAdaptationExpert,
-    MemoryConsolidationExpert
+from .statistical_experts import (
+DescriptiveExpert, CorrelationExpert, DensityExpert, AnomalyExpert
 )
+from .temporal_experts import (
+TrendExpert, DriftExpert, CyclicExpert, TemporalCausalityExpert
+)
+from .relational_experts import (
+GraphBuilderExpert, InfluenceExpert, GroupDynamicsExpert, FeedbackLoopExpert
+)
+from .comprehensive_experts import (
+CausalDiscoveryExpert, CounterfactualExpert, MediationExpert, PolicyEffectExpert,
+ContextualExpert, DomainOntologyExpert, CrossDomainTransferExpert, RepresentationConsistencyExpert,
+CognitiveExpert, SimulationExpert, ForecastExpert, MetaFeedbackExpert, MemoryCuratorExpert, EthicalConstraintExpert
+)
+from .online_router import AdvancedOnlineLearningRouter
+from .unified_storage import UnifiedStorage
+from .simulation import SimulationEngine
+from ..config import FL_CONFIG, META_LEARNING_CONFIG
+
+# ScarcityMoE will be imported when needed to avoid circular imports
 
 
 class SFHFEClient:
-    """
-    SF-HFE Client Node
-    
-    Represents a user device that:
-    - Owns local private data
-    - Trains 10 specialized experts online
-    - Uses router to select active experts
-    - Generates insights for FL
-    - Exchanges weights via P2P gossip
-    - Learns continuously from data stream
-    """
-    
-    def __init__(
-        self,
-        client_id: int,
-        input_dim: int = 20,
-        output_dim: int = 1,
-        has_data: bool = True
-    ):
-        self.client_id = client_id
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.has_data = has_data  # True for User, False for Developer
-        
-        # Logger
-        self.logger = logging.getLogger(f"Client{client_id}")
-        self.logger.info(f"Initializing SF-HFE Client {client_id} ({'User with data' if has_data else 'Developer with NO data'})")
-        
-        # Initialize all 10 experts
-        self.experts = self._initialize_experts()
-        
-        # Initialize router (Cross-Dimension Expert)
-        self.router = ContextualBanditRouter(input_dim=input_dim, num_experts=10)
-        
-        self.logger.info(f"Client {client_id}: Initialized {len(self.experts)} experts + router")
-        
-        # Local data stream buffer
-        self.stream_buffer = []
-        self.batch_size = STREAM_CONFIG["mini_batch_size"]
-        
-        # Training state
-        self.batch_count = 0
-        self.total_samples_processed = 0
-        
-        # Meta-parameters (received from server)
-        self.meta_params = None
-        
-        # P2P state
-        self.connected_peers = []  # List of peer client IDs
-        self.peer_embeddings = {}  # peer_id -> embedding
-        
-        # Performance tracking
-        self.loss_history = []
-        self.drift_events = []
-        
-    def _initialize_experts(self) -> List[nn.Module]:
-        """
-        Initialize all 10 specialized experts
-        
-        Returns:
-            List of expert modules
-        """
-        experts = [
-            GeometryExpert(self.input_dim, self.output_dim),              # 0
-            TemporalExpert(self.input_dim, self.output_dim),              # 1
-            ReconstructionExpert(self.input_dim, self.output_dim),        # 2
-            CausalInferenceExpert(self.input_dim, self.output_dim),       # 3
-            DriftDetectionExpert(self.input_dim, self.output_dim),        # 4
-            GovernanceExpert(self.input_dim, self.output_dim),            # 5
-            StatisticalConsistencyExpert(self.input_dim, self.output_dim),# 6
-            PeerSelectionExpert(self.input_dim, self.output_dim),         # 7
-            MetaAdaptationExpert(self.input_dim, self.output_dim),        # 8
-            MemoryConsolidationExpert(self.input_dim, self.output_dim),   # 9
-        ]
-        
-        return experts
-    
-    def process_stream_batch(self, batch_x: torch.Tensor, batch_y: torch.Tensor) -> Dict:
-        """
-        Process a mini-batch from the data stream
-        
-        This is the MAIN LEARNING FUNCTION
-        
-        Args:
-            batch_x: Input mini-batch [batch_size, input_dim]
-            batch_y: Target mini-batch [batch_size, output_dim]
-        
-        Returns:
-            Metrics dictionary
-        """
-        if not self.has_data:
-            self.logger.warning(f"Client {self.client_id}: Developer has no data - cannot train")
-            return {}
-        
-        self.batch_count += 1
-        self.total_samples_processed += len(batch_x)
-        
-        # Step 1: Router selects top-K experts
-        selected_indices, routing_weights = self.router.select_experts(batch_x, deterministic=False)
-        
-        # Step 2: Each selected expert performs online update
-        expert_metrics = {}
-        expert_losses = []
-        
-        for i in range(self.batch_size):
-            batch_expert_losses = []
-            
-            for j in range(self.router.top_k):
-                expert_idx = selected_indices[i, j].item()
-                expert = self.experts[expert_idx]
-                
-                # Expert performs online update
-                metrics = expert.online_update(
-                    batch_x[i:i+1],
-                    batch_y[i:i+1],
-                    replay=(self.batch_count % MEMORY_CONFIG["replay_frequency"] == 0)
-                )
-                
-                if expert_idx not in expert_metrics:
-                    expert_metrics[expert_idx] = []
-                expert_metrics[expert_idx].append(metrics)
-                
-                batch_expert_losses.append(metrics["loss"])
-            
-            expert_losses.append(torch.tensor(batch_expert_losses))
-        
-        # Step 3: Update router statistics
-        expert_losses_tensor = torch.stack(expert_losses)
-        self.router.update_statistics(selected_indices, expert_losses_tensor)
-        
-        # Step 4: Get final predictions for router training
-        predictions, router_info = self.router.forward(
-            batch_x,
-            self.experts,
-            targets=batch_y,
-            train=True
-        )
-        
-        # Step 5: Train router
-        router_loss = self.router.train_router(
-            predictions,
-            batch_y,
-            router_info["routing_entropy"]
-        )
-        
-        # Step 6: Meta-Adaptation Expert monitors all experts
-        meta_expert = self.experts[8]  # MetaAdaptationExpert
-        for expert_idx, metrics_list in expert_metrics.items():
-            if expert_idx != 8:  # Don't monitor itself
-                avg_loss = np.mean([m["loss"] for m in metrics_list])
-                # Get gradient norm (simplified - use loss as proxy)
-                grad_norm = avg_loss  # Simplified
-                current_lr = self.experts[expert_idx].lr
-                
-                meta_expert.monitor_expert(expert_idx, avg_loss, grad_norm, current_lr)
-        
-        # Step 7: Apply LR recommendations from Meta-Adaptation Expert
-        for expert_idx in range(10):
-            if expert_idx != 8:
-                recommended_lr = meta_expert.get_lr_recommendation(expert_idx)
-                if recommended_lr == 0.0:
-                    # Freeze signal
-                    if not self.experts[expert_idx].is_frozen:
-                        self.experts[expert_idx].freeze()
-                        self.logger.info(f"Client {self.client_id}: Froze Expert {expert_idx}")
-                else:
-                    # Apply LR
-                    self.experts[expert_idx].adapt_learning_rate(recommended_lr)
-        
-        # Step 8: Check for drift and handle
-        drift_expert = self.experts[4]  # DriftDetectionExpert
-        if drift_expert.drift_detected:
-            self._handle_drift()
-            drift_expert.reset_drift_flag()
-        
-        # Step 9: Memory consolidation if needed
-        memory_expert = self.experts[9]  # MemoryConsolidationExpert
-        if memory_expert.should_consolidate(self.batch_count):
-            for expert in self.experts:
-                memory_expert.update_memory_pressure(expert.memory)
-                consolidation_info = memory_expert.consolidate_memory(expert.memory)
-                if consolidation_info["consolidated"] > 0:
-                    self.logger.debug(
-                        f"Client {self.client_id}: Consolidated {consolidation_info['consolidated']} "
-                        f"samples for Expert {expert.expert_id}"
-                    )
-        
-        # Aggregate metrics
-        avg_loss = np.mean([m["loss"] for metrics_list in expert_metrics.values() for m in metrics_list])
-        self.loss_history.append(avg_loss)
-        
-        summary = {
-            "batch": self.batch_count,
-            "samples_processed": self.total_samples_processed,
-            "avg_loss": avg_loss,
-            "router_loss": router_loss,
-            "routing_entropy": router_info["routing_entropy"],
-            "selected_experts": router_info["selected_experts"],
-            "num_active_experts": len(expert_metrics),
-        }
-        
-        return summary
-    
-    def _handle_drift(self):
-        """
-        Handle concept drift detection
-        """
-        self.logger.info(f"Client {self.client_id}: Concept drift detected! Triggering adaptations...")
-        
-        # Reset temporal expert's hidden state
-        temporal_expert = self.experts[1]
-        temporal_expert.reset_temporal_state()
-        
-        # Trigger memory consolidation
-        memory_expert = self.experts[9]
-        for expert in self.experts:
-            memory_expert.consolidate_memory(expert.memory)
-        
-        # Log event
-        self.drift_events.append(self.batch_count)
-    
-    def generate_insights(self) -> Dict:
-        """
-        Generate insights for Federated Learning
-        
-        Returns metadata (NOT raw data or weights) for Meta-Learner
-        """
-        insights = {
-            "client_id": self.client_id,
-            "has_data": self.has_data,
-            "total_samples": self.total_samples_processed,
-            "batch_count": self.batch_count,
-            "avg_loss": np.mean(self.loss_history[-100:]) if len(self.loss_history) >= 100 else 0.0,
-        }
-        
-        # Collect insights from all experts
-        expert_insights = {}
-        for expert in self.experts:
-            expert_insight = expert.generate_insight()
-            expert_insights[expert.expert_name] = expert_insight
-        
-        insights["expert_insights"] = expert_insights
-        
-        # Router insights
-        insights["router"] = self.router.generate_insight()
-        
-        # Drift information
-        insights["drift_events_count"] = len(self.drift_events)
-        insights["batches_since_last_drift"] = (
-            self.batch_count - self.drift_events[-1]
-            if self.drift_events else self.batch_count
-        )
-        
-        return insights
-    
-    def receive_meta_parameters(self, meta_params: Dict):
-        """
-        Receive global meta-parameters from server
-        
-        Args:
-            meta_params: Dictionary containing w_init and alpha_i
-        """
-        self.meta_params = meta_params
-        
-        # Apply meta-learned initialization (if we're restarting experts)
-        if "w_init" in meta_params and "apply_to_new_experts" in meta_params:
-            # This would be used when adding new experts or reinitializing
-            pass
-        
-        # Apply expert-specific learning rates
-        if "expert_alphas" in meta_params:
-            for expert_idx, alpha in meta_params["expert_alphas"].items():
-                if 0 <= expert_idx < len(self.experts):
-                    self.experts[expert_idx].adapt_learning_rate(alpha)
-        
-        self.logger.info(f"Client {self.client_id}: Received meta-parameters from server")
-    
-    def get_expert_weights(self, expert_idx: int) -> Dict[str, torch.Tensor]:
-        """
-        Get weights from a specific expert (for P2P exchange)
-        """
-        if 0 <= expert_idx < len(self.experts):
-            return self.experts[expert_idx].get_weights()
-        return {}
-    
-    def set_expert_weights(
-        self,
-        expert_idx: int,
-        weights: Dict[str, torch.Tensor],
-        blend_factor: float = 0.5
-    ):
-        """
-        Set weights for a specific expert (from P2P peer)
-        """
-        if 0 <= expert_idx < len(self.experts):
-            self.experts[expert_idx].set_weights(weights, blend_factor)
-    
-    def sync_with_peer(self, peer_id: int, peer_client: 'SFHFEClient'):
-        """
-        P2P gossip: exchange weights with a peer
-        
-        Exchanges only the most active experts' weights
-        """
-        if not P2P_CONFIG["enabled"]:
-            return
-        
-        # Get most active experts from router
-        most_active = self.router.get_most_active_experts(k=P2P_CONFIG["exchange_top_n"])
-        
-        # Exchange weights for each active expert
-        for expert_idx in most_active:
-            # Get peer's weights
-            peer_weights = peer_client.get_expert_weights(expert_idx)
-            
-            # Update our weights (blend)
-            self.set_expert_weights(
-                expert_idx,
-                peer_weights,
-                blend_factor=P2P_CONFIG["aggregation_weight"]
-            )
-            
-            # Give our weights to peer
-            our_weights = self.get_expert_weights(expert_idx)
-            peer_client.set_expert_weights(
-                expert_idx,
-                our_weights,
-                blend_factor=P2P_CONFIG["aggregation_weight"]
-            )
-        
-        self.logger.info(
-            f"Client {self.client_id} <-> Client {peer_id}: "
-            f"Synced {len(most_active)} experts ({most_active})"
-        )
-    
-    def compute_peer_similarity(self, peer_client: 'SFHFEClient') -> float:
-        """
-        Compute similarity with another client
-        Uses PeerSelectionExpert (expert #7)
-        """
-        peer_expert = self.experts[7]  # PeerSelectionExpert
-        
-        # Get our embedding
-        our_embedding = peer_expert.get_client_embedding()
-        
-        # Get peer's embedding
-        peer_peer_expert = peer_client.experts[7]
-        peer_embedding = peer_peer_expert.get_client_embedding()
-        
-        # Compute similarity
-        similarity = peer_expert.compute_similarity(peer_embedding)
-        
-        # Update similarity tracking
-        peer_expert.update_peer_similarity(peer_client.client_id, similarity)
-        
-        return similarity
-    
-    def select_peers(self, all_clients: List['SFHFEClient']) -> List[int]:
-        """
-        Select top-K similar peers for P2P exchange
-        
-        Args:
-            all_clients: List of all clients in the system
-        
-        Returns:
-            List of selected peer IDs
-        """
-        peer_expert = self.experts[7]  # PeerSelectionExpert
-        
-        # Compute similarity with all other clients
-        for client in all_clients:
-            if client.client_id != self.client_id:
-                self.compute_peer_similarity(client)
-        
-        # Select top-K
-        selected_peers = peer_expert.select_top_k_peers(
-            k=P2P_CONFIG["top_k_peers"],
-            hysteresis=P2P_CONFIG["hysteresis_threshold"]
-        )
-        
-        self.connected_peers = selected_peers
-        
-        return selected_peers
-    
-    def get_stats(self) -> Dict:
-        """
-        Get comprehensive client statistics
-        """
-        return {
-            "client_id": self.client_id,
-            "has_data": self.has_data,
-            "total_samples": self.total_samples_processed,
-            "batch_count": self.batch_count,
-            "loss_history": self.loss_history[-100:],
-            "avg_loss": np.mean(self.loss_history[-100:]) if len(self.loss_history) >= 100 else 0.0,
-            "drift_events": len(self.drift_events),
-            "router_stats": self.router.get_expert_statistics(),
-            "expert_stats": [expert.stats() for expert in self.experts],
-            "connected_peers": self.connected_peers,
-        }
+"""
+SF-HFE Client - User device with OMEO as base model
 
+Responsibilities:
+- Train OMEO model on local user data
+- Extract OMEO model updates (not raw data)
+- Participate in P2P gossip learning with other users
+- Send OMEO updates to server
+- Receive updated OMEO parameters from server
+"""
+
+def __init__(self, client_id: int, domain: str = "general", config: Dict = None):
+self.client_id = client_id
+self.domain = domain
+self.config = config or {}
+
+# Logger
+self.logger = logging.getLogger(f"Client-{client_id}")
+self.logger.info(f"Initializing SF-HFE Client {client_id} for domain '{domain}'")
+
+# Initialize 30-expert online learning system
+self.experts = self._initialize_experts()
+self.router = AdvancedOnlineLearningRouter(self.experts, config=self.config.get('router', {}))
+self.storage = UnifiedStorage(config=self.config.get('storage', {}))
+self.simulation = SimulationEngine(config=self.config.get('simulation', {}))
+
+# Expert weights and performance tracking
+self.expert_weights = {}
+self.expert_performance = {}
+self.training_samples = 0
+
+# P2P gossip state
+self.peer_weights = {} # peer_id -> expert weights
+self.gossip_history = []
+self.last_gossip_time = time.time()
+
+# Meta-parameters from server
+self.meta_parameters = None
+self.last_meta_update = time.time()
+
+# Thread safety
+self._lock = threading.Lock()
+
+# Initialize experts with default weights
+self._initialize_experts()
+
+def _initialize_experts(self):
+"""Initialize all 30 experts for online learning"""
+experts = []
+
+# Structural Experts (1-4)
+experts.append(SchemaMapperExpert(expert_id=1, config=self.config.get('experts', {}).get(1, {})))
+experts.append(TypeFormatExpert(expert_id=2, config=self.config.get('experts', {}).get(2, {})))
+experts.append(MissingnessNoiseExpert(expert_id=3, config=self.config.get('experts', {}).get(3, {})))
+experts.append(ScalingEncodingExpert(expert_id=4, config=self.config.get('experts', {}).get(4, {})))
+
+# Statistical Experts (5-8)
+experts.append(DescriptiveExpert(expert_id=5, config=self.config.get('experts', {}).get(5, {})))
+experts.append(CorrelationExpert(expert_id=6, config=self.config.get('experts', {}).get(6, {})))
+experts.append(DensityExpert(expert_id=7, config=self.config.get('experts', {}).get(7, {})))
+experts.append(AnomalyExpert(expert_id=8, config=self.config.get('experts', {}).get(8, {})))
+
+# Temporal Experts (9-12)
+experts.append(TrendExpert(expert_id=9, config=self.config.get('experts', {}).get(9, {})))
+experts.append(DriftExpert(expert_id=10, config=self.config.get('experts', {}).get(10, {})))
+experts.append(CyclicExpert(expert_id=11, config=self.config.get('experts', {}).get(11, {})))
+experts.append(TemporalCausalityExpert(expert_id=12, config=self.config.get('experts', {}).get(12, {})))
+
+# Relational/Interactional Experts (13-16)
+experts.append(GraphBuilderExpert(expert_id=13, config=self.config.get('experts', {}).get(13, {})))
+experts.append(InfluenceExpert(expert_id=14, config=self.config.get('experts', {}).get(14, {})))
+experts.append(GroupDynamicsExpert(expert_id=15, config=self.config.get('experts', {}).get(15, {})))
+experts.append(FeedbackLoopExpert(expert_id=16, config=self.config.get('experts', {}).get(16, {})))
+
+# Causal Experts (17-20)
+experts.append(CausalDiscoveryExpert(expert_id=17, config=self.config.get('experts', {}).get(17, {})))
+experts.append(CounterfactualExpert(expert_id=18, config=self.config.get('experts', {}).get(18, {})))
+experts.append(MediationExpert(expert_id=19, config=self.config.get('experts', {}).get(19, {})))
+experts.append(PolicyEffectExpert(expert_id=20, config=self.config.get('experts', {}).get(20, {})))
+
+# Semantic/Contextual Experts (21-24)
+experts.append(ContextualExpert(expert_id=21, config=self.config.get('experts', {}).get(21, {})))
+experts.append(DomainOntologyExpert(expert_id=22, config=self.config.get('experts', {}).get(22, {})))
+experts.append(CrossDomainTransferExpert(expert_id=23, config=self.config.get('experts', {}).get(23, {})))
+experts.append(RepresentationConsistencyExpert(expert_id=24, config=self.config.get('experts', {}).get(24, {})))
+
+# Integrative/Cognitive Experts (25-30)
+experts.append(CognitiveExpert(expert_id=25, config=self.config.get('experts', {}).get(25, {})))
+experts.append(SimulationExpert(expert_id=26, config=self.config.get('experts', {}).get(26, {})))
+experts.append(ForecastExpert(expert_id=27, config=self.config.get('experts', {}).get(27, {})))
+experts.append(MetaFeedbackExpert(expert_id=28, config=self.config.get('experts', {}).get(28, {})))
+experts.append(MemoryCuratorExpert(expert_id=29, config=self.config.get('experts', {}).get(29, {})))
+experts.append(EthicalConstraintExpert(expert_id=30, config=self.config.get('experts', {}).get(30, {})))
+
+self.logger.info(f"Initialized {len(experts)} experts for online learning")
+return experts
+
+def process_data(self, data: np.ndarray, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+"""
+Process data through the 30-expert online learning system
+
+Args:
+data: Input data array
+metadata: Additional context information
+
+Returns:
+Dictionary containing expert insights and analysis
+"""
+metadata = metadata or {}
+
+with self._lock:
+try:
+# Route data to appropriate experts
+selected_experts = self.router.route_experts(data, metadata)
+
+# Process data through selected experts
+expert_results = {}
+for expert_id, weight in selected_experts:
+expert = self.experts[expert_id]
+
+# Activate expert
+if expert.activate(metadata):
+# Process data
+result = expert.process_data(data, metadata)
+expert_results[expert_id] = {
+'result': result,
+'weight': weight,
+'expert_name': expert.name
+}
+
+# Update expert online
+expert.update_online(data, {'context': metadata})
+
+# Store results in unified storage
+self.storage.store_results(expert_results, metadata)
+
+# Generate simulation if requested
+simulation_results = None
+if metadata.get('generate_simulation', False):
+simulation_results = self.simulation.generate_simulation(data, expert_results)
+
+# Compile final results
+final_results = {
+'expert_results': expert_results,
+'simulation_results': simulation_results,
+'processing_metadata': {
+'num_experts_used': len(expert_results),
+'total_experts': len(self.experts),
+'processing_time': time.time(),
+'domain': self.domain
+}
+}
+
+# Update performance tracking
+self._update_performance_tracking(expert_results)
+
+return final_results
+
+except Exception as e:
+self.logger.error(f"Error processing data: {e}")
+return {'error': str(e), 'expert_results': {}}
+
+def _update_performance_tracking(self, expert_results: Dict[str, Any]):
+"""Update performance tracking for experts"""
+for expert_id, result_info in expert_results.items():
+result = result_info['result']
+confidence = result.get('confidence', 0.5)
+
+# Update router with performance feedback
+self.router.update_routing(expert_id, confidence, {
+'context': result.get('processing_metadata', {}),
+'expert_name': result_info['expert_name']
+})
+
+
+def train_experts(self, data: np.ndarray, labels: np.ndarray = None) -> Dict:
+"""
+Train experts on local data
+
+Args:
+data: Local training data
+labels: Optional labels for supervised learning
+
+Returns:
+Training results and insights
+"""
+with self._lock:
+self.logger.info(f"Client {self.client_id}: Training experts on {len(data)} samples")
+
+# Process data through MoE system
+results = self.moe_system.process_data(data)
+
+# Update expert weights based on performance
+self._update_expert_weights(results)
+
+# Track training samples
+self.training_samples += len(data)
+
+# Extract insights for server
+insights = self._extract_insights(results)
+
+self.logger.info(f"Client {self.client_id}: Training complete, extracted insights")
+return insights
+
+def _update_expert_weights(self, results: Dict):
+"""Update expert weights based on MoE results"""
+for tier_name, tier_results in results.items():
+if tier_name.startswith('tier'):
+# Update weights based on tier performance
+for expert_name, performance in tier_results.get('expert_performance', {}).items():
+if expert_name in self.expert_weights:
+# Simple weight update (can be made more sophisticated)
+learning_rate = 0.01
+if performance.get('loss', 0) > 0:
+self.expert_weights[expert_name] += learning_rate * np.random.randn(64)
+self.expert_performance[expert_name] = performance
+
+def _extract_insights(self, results: Dict) -> Dict:
+"""Extract insights from MoE results (no raw data)"""
+insights = {
+"client_id": self.client_id,
+"domain": self.domain,
+"expert_insights": {},
+"avg_loss": 0.0,
+"total_samples": self.training_samples,
+"timestamp": time.time()
+}
+
+# Aggregate expert performance
+total_loss = 0.0
+expert_count = 0
+
+for expert_name, performance in self.expert_performance.items():
+loss = performance.get('loss', 0.0)
+samples = performance.get('samples', 0)
+
+insights["expert_insights"][expert_name] = {
+"loss": loss,
+"samples": samples,
+"last_update": performance.get('last_update', time.time())
+}
+
+total_loss += loss
+expert_count += 1
+
+insights["avg_loss"] = total_loss / expert_count if expert_count > 0 else 0.0
+
+return insights
+
+def select_peers(self, all_clients: List) -> List[int]:
+"""
+Select peers for P2P gossip based on domain similarity
+
+Args:
+all_clients: List of all available clients
+
+Returns:
+List of selected peer client IDs
+"""
+with self._lock:
+# Filter clients by domain
+domain_clients = [c for c in all_clients if c.domain == self.domain]
+
+# Exclude self
+domain_clients = [c for c in domain_clients if c.client_id != self.client_id]
+
+# Select top 3 peers based on performance similarity
+selected_peers = []
+if domain_clients:
+# Simple selection: choose clients with similar performance
+for client in domain_clients[:3]:
+selected_peers.append(client.client_id)
+
+self.logger.debug(f"Client {self.client_id}: Selected peers {selected_peers} from domain '{self.domain}'")
+return selected_peers
+
+def gossip_exchange(self, peer_weights: Dict[int, Dict]) -> Dict:
+"""
+Perform P2P gossip exchange with peers
+
+Args:
+peer_weights: Dictionary of peer_id -> expert weights
+
+Returns:
+Updated expert weights after gossip
+"""
+with self._lock:
+self.logger.info(f"Client {self.client_id}: Performing gossip exchange with {len(peer_weights)} peers")
+
+# Store peer weights
+self.peer_weights.update(peer_weights)
+
+# Perform weighted average of expert weights
+updated_weights = {}
+
+for expert_name in self.expert_weights:
+# Start with own weights
+weight_sum = self.expert_weights[expert_name].copy()
+weight_count = 1
+
+# Add peer weights
+for peer_id, peer_expert_weights in peer_weights.items():
+if expert_name in peer_expert_weights:
+weight_sum += peer_expert_weights[expert_name]
+weight_count += 1
+
+# Average the weights
+updated_weights[expert_name] = weight_sum / weight_count
+
+# Update own weights
+self.expert_weights.update(updated_weights)
+
+# Record gossip exchange
+self.gossip_history.append({
+"timestamp": time.time(),
+"peers": list(peer_weights.keys()),
+"experts_updated": len(updated_weights)
+})
+
+self.last_gossip_time = time.time()
+
+self.logger.info(f"Client {self.client_id}: Gossip exchange complete, updated {len(updated_weights)} experts")
+return updated_weights
+
+def receive_meta_parameters(self, meta_params: Dict):
+"""Receive meta-parameters from server"""
+with self._lock:
+self.meta_parameters = meta_params
+self.last_meta_update = time.time()
+
+# Update expert initialization if provided
+if 'w_init' in meta_params:
+self._update_expert_initialization(meta_params['w_init'])
+
+# Update learning rates if provided
+if 'expert_alphas' in meta_params:
+self._update_learning_rates(meta_params['expert_alphas'])
+
+self.logger.info(f"Client {self.client_id}: Received meta-parameters from server")
+
+def _update_expert_initialization(self, w_init: np.ndarray):
+"""Update expert initialization weights"""
+for i, expert_name in enumerate(self.expert_weights):
+if i < len(w_init):
+self.expert_weights[expert_name] = w_init[i].copy()
+
+def _update_learning_rates(self, expert_alphas: Dict):
+"""Update learning rates for experts"""
+# This would be used in future training rounds
+self.config['learning_rates'] = expert_alphas
+
+def get_expert_weights(self) -> Dict:
+"""Get current expert weights for gossip exchange"""
+with self._lock:
+return self.expert_weights.copy()
+
+def get_performance_stats(self) -> Dict:
+"""Get performance statistics"""
+with self._lock:
+return {
+"client_id": self.client_id,
+"domain": self.domain,
+"training_samples": self.training_samples,
+"expert_count": len(self.expert_weights),
+"last_gossip_time": self.last_gossip_time,
+"gossip_exchanges": len(self.gossip_history),
+"avg_loss": np.mean([p.get('loss', 0) for p in self.expert_performance.values()])
+}
+
+def get_omoe_model_updates(self) -> Dict:
+"""
+Get OMEO model updates from this user client
+
+Returns:
+Dictionary containing OMEO model updates (not raw data)
+"""
+with self._lock:
+# Extract OMEO model updates from all tiers
+omoe_updates = {
+"client_id": self.client_id,
+"domain": self.domain,
+"tier_weights": {},
+"expert_performance": self.expert_performance.copy(),
+"training_samples": self.training_samples,
+"timestamp": time.time()
+}
+
+# Get weights from each tier
+for tier_name in ["tier1", "tier2", "tier3", "tier4", "tier5", "tier6"]:
+if hasattr(self, tier_name):
+tier = getattr(self, tier_name)
+if hasattr(tier, 'get_weights'):
+omoe_updates["tier_weights"][tier_name] = tier.get_weights()
+
+self.logger.debug(f"User client {self.client_id}: Generated OMEO model updates")
+return omoe_updates
+
+def sync_with_peer(self, peer_id: int, peer_client):
+"""
+Synchronize with a peer client during P2P gossip exchange
+
+Args:
+peer_id: ID of the peer client
+peer_client: The peer client object
+"""
+with self._lock:
+try:
+self.logger.info(f"Client {self.client_id}: Syncing with peer {peer_id}")
+
+# Get peer's expert weights
+peer_weights = peer_client.get_expert_weights()
+
+# Perform gossip exchange
+updated_weights = self.gossip_exchange({peer_id: peer_weights})
+
+self.logger.info(f"Client {self.client_id}: Sync with peer {peer_id} completed")
+return updated_weights
+
+except Exception as e:
+self.logger.error(f"Client {self.client_id}: Error syncing with peer {peer_id}: {e}")
+return {}
+
+def update_omoe_parameters(self, meta_parameters: Dict):
+"""Update OMEO parameters from the server"""
+with self._lock:
+try:
+# Update tier configurations with new meta-parameters
+for tier_name, tier_params in meta_parameters.items():
+if hasattr(self, tier_name):
+tier = getattr(self, tier_name)
+if hasattr(tier, 'update_parameters'):
+tier.update_parameters(tier_params)
+
+# Update global storage and simulation engine
+if hasattr(self, 'storage') and hasattr(self.storage, 'update_parameters'):
+self.storage.update_parameters(meta_parameters.get('storage', {}))
+if hasattr(self, 'simulation') and hasattr(self.simulation, 'update_parameters'):
+self.simulation.update_parameters(meta_parameters.get('simulation', {}))
+
+self.logger.info(f"User client {self.client_id}: Updated OMEO parameters")
+
+except Exception as e:
+self.logger.error(f"User client {self.client_id}: Error updating OMEO parameters: {e}")
+
+
+# Import ScarcityMoE from the same module
+# Remove the circular import at the end
+# from . import ScarcityMoE

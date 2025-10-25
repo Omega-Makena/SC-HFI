@@ -10,9 +10,9 @@ from .server import SFHFEServer
 from .gossip import P2PGossipManager
 
 __all__ = [
-    'GlobalMemory',
-    'OnlineMAMLEngine',
-    'SFHFEServer',
-    'P2PGossipManager',
+'GlobalMemory',
+'OnlineMAMLEngine',
+'SFHFEServer',
+'P2PGossipManager',
 ]
 
